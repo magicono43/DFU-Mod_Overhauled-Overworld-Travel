@@ -3,7 +3,7 @@
 // License:         MIT License (http://www.opensource.org/licenses/mit-license.php)
 // Author:          Kirk.O
 // Created On: 	    8/3/2023, 8:40 PM
-// Last Edit:		8/3/2023, 8:40 PM
+// Last Edit:		8/5/2023, 12:40 AM
 // Version:			1.00
 // Special Thanks:  
 // Modifier:
@@ -26,7 +26,7 @@ namespace OverhauledOverworldTravel
         static Mod mod;
 
         // Options
-        public static bool TogglePotionsGlassBottles { get; set; }
+        //public static bool TogglePotionsGlassBottles { get; set; }
 
         // Mod Compatibility Check Values
         public static bool ClimatesAndCaloriesCheck { get; set; }
@@ -72,24 +72,24 @@ namespace OverhauledOverworldTravel
 
         static void LoadSettings(ModSettings modSettings, ModSettingsChange change)
         {
-            TogglePotionsGlassBottles = mod.GetSettings().GetValue<bool>("ToggleInteractables", "PotionsPoisonsAlcoholGlass-Bottles");
+            //TogglePotionsGlassBottles = mod.GetSettings().GetValue<bool>("ToggleInteractables", "PotionsPoisonsAlcoholGlass-Bottles");
         }
 
         private void ModCompatibilityChecking()
         {
-            Mod climatesAndCalories = ModManager.Instance.GetMod("Climates & Calories");
-            ClimatesAndCaloriesCheck = climatesAndCalories != null ? true : false;
+            /*Mod climatesAndCalories = ModManager.Instance.GetMod("Climates & Calories");
+            ClimatesAndCaloriesCheck = climatesAndCalories != null ? true : false;*/
         }
 
         private void LoadTextures() // Example taken from Penwick Papers Mod
         {
-            ModManager modManager = ModManager.Instance;
+            /*ModManager modManager = ModManager.Instance;
             bool success = true;
 
             success &= modManager.TryGetAsset("Grab-Mode_Choice_Menu", false, out GrabModeChoiceMenuTexture);
 
             if (!success)
-                throw new Exception("Overhauled Overworld Travel: Missing texture asset");
+                throw new Exception("Overhauled Overworld Travel: Missing texture asset");*/
         }
     }
 }

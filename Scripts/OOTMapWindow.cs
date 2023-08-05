@@ -30,6 +30,8 @@ namespace OverhauledOverworldTravel
 
         public static Color32 roadColor = new Color32(60, 60, 60, 255);
         public static Color32 trackColor = new Color32(160, 118, 74, 255);
+        public static Color32 testColor = new Color32(255, 0, 0, 255);
+        public static Color32 blackColor = new Color32(0, 0, 0, 255);
 
         public Vector2 buttonSize = new Vector2(47, 11);
         public Vector2 portsSize = new Vector2(45, 11);
@@ -159,22 +161,22 @@ namespace OverhauledOverworldTravel
                 portsFilterButton.BackgroundTexture = portsOffTexture;
                 portsFilterButton.OnMouseClick += PortsFilterButton_OnMouseClick;
                 NativePanel.Components.Add(portsFilterButton);
-            }
+            }*/
 
-            if (TravelOptionsMod.Instance.RoadsIntegration)
+            if (true)
             {
                 SetupPathButtons();
                 UpdatePathButtons();
 
-                if (TravelOptionsMod.Instance.WaterwaysEnabled)
+                /*if (TravelOptionsMod.Instance.WaterwaysEnabled)
                 {
                     SetupWaterButtons();
                     UpdateWaterButtons();
-                }
+                }*/
 
                 locationDotsPixelBuffer = new Color32[(int)regionTextureOverlayPanelRect.width * (int)regionTextureOverlayPanelRect.height * 25];
                 locationDotsTexture = new Texture2D((int)regionTextureOverlayPanelRect.width * 5, (int)regionTextureOverlayPanelRect.height * 5, TextureFormat.ARGB32, false);
-            }*/
+            }
         }
 
         private void PortsFilterButton_OnMouseClick(BaseScreenComponent sender, Vector2 position)
@@ -488,7 +490,7 @@ namespace OverhauledOverworldTravel
         protected override void ClickHandler(BaseScreenComponent sender, Vector2 position)
         {
             // If allowed handle clicks on map pixels without a location, allowing non-fast travel to any MP coords
-            /*if (TravelOptionsMod.Instance.TargetCoordsAllowed && RegionSelected && !locationSelected && !MouseOverOtherRegion)
+            if (RegionSelected && !locationSelected && !MouseOverOtherRegion)
             {
                 position.y -= regionPanelOffset;
 
@@ -500,13 +502,13 @@ namespace OverhauledOverworldTravel
                 {
                     popUp = (DaggerfallTravelPopUp)UIWindowFactory.GetInstanceWithArgs(UIWindowType.TravelPopUp, new object[] { uiManager, uiManager.TopWindow, this });
                 }
-                ((TravelOptionsPopUp)popUp).EndPos = GetClickMPCoords();
+                //((TravelOptionsPopUp)popUp).EndPos = GetClickMPCoords();
                 uiManager.PushWindow(popUp);
             }
             else
             {
                 base.ClickHandler(sender, position);
-            }*/
+            }
         }
 
         protected void MarkLocationHandler(BaseScreenComponent sender, Vector2 position)
@@ -560,14 +562,14 @@ namespace OverhauledOverworldTravel
         {
             GetDiscoveredLocationsFromHiddenMapMod();
 
-            /*if (TravelOptionsMod.Instance.RoadsIntegration && selectedRegion != 61)
+            if (selectedRegion != 61)
             {
                 UpdateMapLocationDotsTextureWithPaths();
             }
             else
             {
                 base.UpdateMapLocationDotsTexture();
-            }*/
+            }
         }
 
         protected virtual void UpdateMapLocationDotsTextureWithPaths()
@@ -607,6 +609,9 @@ namespace OverhauledOverworldTravel
                     if (showPaths[path_roads])
                         DrawPath(offset5, width5, pathsData[path_roads][pIdx], roadColor, ref locationDotsPixelBuffer);*/
                     //Debug.LogFormat("Found path at x:{0} y:{1}  index:{2}", originX + x, originY + y, rIdx);
+
+                    if (y % 6 == 0 || x % 6 == 0)
+                        DrawPath(offset5, width5, blackColor, ref locationDotsPixelBuffer); // My testing stuff right now. Work on this more tomorrow.
 
                     ContentReader.MapSummary summary;
                     if (DaggerfallUnity.ContentReader.HasLocation(originX + x, originY + y, out summary))
@@ -658,14 +663,14 @@ namespace OverhauledOverworldTravel
                 {
                     for (int x = -2; x < 7; x++)
                     {
-                        //pixelBuffer[offset + (y * width) + x] = TravelOptionsMod.Instance.MarkLocationColor;
+                        pixelBuffer[offset + (y * width) + x] = blackColor;
                     }
                 }
                 for (int x = -2; x < 8; x = x + 8)
                 {
                     for (int y = -2; y < 7; y++)
                     {
-                        //pixelBuffer[offset + (y * width) + x] = TravelOptionsMod.Instance.MarkLocationColor;
+                        pixelBuffer[offset + (y * width) + x] = blackColor;
                     }
                 }
             }
@@ -676,52 +681,58 @@ namespace OverhauledOverworldTravel
             return locationType == DFRegion.LocationTypes.TownCity || locationType == DFRegion.LocationTypes.TownHamlet || onlyLargeDots;
         }
 
-        public static void DrawPath(int offset, int width, byte pathDataPt, Color32 pathColor, ref Color32[] pixelBuffer)
+        public static void DrawPath(int offset, int width, Color32 pathColor, ref Color32[] pixelBuffer)
         {
-            if (pathDataPt == 0)
-                return;
+            bool south = true;
+            bool southEast = true;
+            bool east = true;
+            bool northEast = true;
+            bool north = true;
+            bool northWest = true;
+            bool west = true;
+            bool southWest = true;
 
             pixelBuffer[offset + (width * 2) + 2] = pathColor;
-            /*if ((pathDataPt & TravelOptionsMod.S) != 0)
+            if (south)
             {
                 pixelBuffer[offset + 2] = pathColor;
                 pixelBuffer[offset + width + 2] = pathColor;
             }
-            if ((pathDataPt & TravelOptionsMod.SE) != 0)
+            if (southEast)
             {
                 pixelBuffer[offset + 4] = pathColor;
                 pixelBuffer[offset + width + 3] = pathColor;
             }
-            if ((pathDataPt & TravelOptionsMod.E) != 0)
+            if (east)
             {
                 pixelBuffer[offset + (width * 2) + 3] = pathColor;
                 pixelBuffer[offset + (width * 2) + 4] = pathColor;
             }
-            if ((pathDataPt & TravelOptionsMod.NE) != 0)
+            if (northEast)
             {
                 pixelBuffer[offset + (width * 3) + 3] = pathColor;
                 pixelBuffer[offset + (width * 4) + 4] = pathColor;
             }
-            if ((pathDataPt & TravelOptionsMod.N) != 0)
+            if (north)
             {
                 pixelBuffer[offset + (width * 3) + 2] = pathColor;
                 pixelBuffer[offset + (width * 4) + 2] = pathColor;
             }
-            if ((pathDataPt & TravelOptionsMod.NW) != 0)
+            if (northWest)
             {
                 pixelBuffer[offset + (width * 3) + 1] = pathColor;
                 pixelBuffer[offset + (width * 4)] = pathColor;
             }
-            if ((pathDataPt & TravelOptionsMod.W) != 0)
+            if (west)
             {
                 pixelBuffer[offset + (width * 2)] = pathColor;
                 pixelBuffer[offset + (width * 2) + 1] = pathColor;
             }
-            if ((pathDataPt & TravelOptionsMod.SW) != 0)
+            if (southWest)
             {
                 pixelBuffer[offset] = pathColor;
                 pixelBuffer[offset + width + 1] = pathColor;
-            }*/
+            }
         }
 
         // Zoom and pan region texture
@@ -729,7 +740,7 @@ namespace OverhauledOverworldTravel
         {
             base.ZoomMapTextures();
 
-            /*if (TravelOptionsMod.Instance.RoadsIntegration && RegionSelected && zoom)
+            if (RegionSelected && zoom)
             {
                 // Adjust cropped location dots overlay to x5 version
                 int width = (int)regionTextureOverlayPanelRect.width;
@@ -752,7 +763,7 @@ namespace OverhauledOverworldTravel
                 regionLocationDotsOverlayPanel.BackgroundCroppedRect = locationDotsNewRect;
 
                 UpdateBorder();
-            }*/
+            }
         }
 
         public void DrawMapSection(int originX, int originY, int width, int height, ref Color32[] pixelBuffer, bool circular = false)
@@ -788,6 +799,8 @@ namespace OverhauledOverworldTravel
                         DrawPath(offset5, width5, pathsData[path_tracks][pIdx], trackColor, ref pixelBuffer);
                     if (showPaths[path_roads])
                         DrawPath(offset5, width5, pathsData[path_roads][pIdx], roadColor, ref pixelBuffer);*/
+
+                    DrawPath(offset5, width5, testColor, ref pixelBuffer); // My testing stuff right now.
 
                     ContentReader.MapSummary summary;
                     if (DaggerfallUnity.Instance.ContentReader.HasLocation(mpX, mpY, out summary))

@@ -12,6 +12,7 @@ using DaggerfallWorkshop.Game.Utility.ModSupport;
 using DaggerfallWorkshop.Game;
 using DaggerfallWorkshop.Game.Guilds;
 using DaggerfallConnect.Utility;
+using DaggerfallWorkshop.Game.Utility;
 
 namespace OverhauledOverworldTravel
 {
@@ -610,8 +611,13 @@ namespace OverhauledOverworldTravel
                         DrawPath(offset5, width5, pathsData[path_roads][pIdx], roadColor, ref locationDotsPixelBuffer);*/
                     //Debug.LogFormat("Found path at x:{0} y:{1}  index:{2}", originX + x, originY + y, rIdx);
 
-                    if (y % 6 == 0 || x % 6 == 0)
-                        DrawPath(offset5, width5, blackColor, ref locationDotsPixelBuffer); // My testing stuff right now. Work on this more tomorrow.
+                    //if (y % 1 == 0 || x % 1 == 0)
+                        //DrawPath(offset5, width5, blackColor, ref locationDotsPixelBuffer); // My testing stuff right now. Work on this more tomorrow.
+
+                    DFPosition playerPOS = TravelTimeCalculator.GetPlayerTravelPosition();
+
+                    if (originY + y == playerPOS.Y && originX + x == playerPOS.X)
+                        DrawPlayerPosition(offset5, width5, blackColor, ref locationDotsPixelBuffer); // My testing stuff right now. Work on this more tomorrow.
 
                     ContentReader.MapSummary summary;
                     if (DaggerfallUnity.ContentReader.HasLocation(originX + x, originY + y, out summary))
@@ -681,15 +687,69 @@ namespace OverhauledOverworldTravel
             return locationType == DFRegion.LocationTypes.TownCity || locationType == DFRegion.LocationTypes.TownHamlet || onlyLargeDots;
         }
 
+        public static void DrawPlayerPosition(int offset, int width, Color32 pathColor, ref Color32[] pixelBuffer)
+        {
+            bool south = false;
+            bool southEast = true;
+            bool east = false;
+            bool northEast = true;
+            bool north = false;
+            bool northWest = true;
+            bool west = false;
+            bool southWest = true;
+
+            pixelBuffer[offset + (width * 2) + 2] = pathColor;
+            if (south)
+            {
+                pixelBuffer[offset + 2] = pathColor;
+                pixelBuffer[offset + width + 2] = pathColor;
+            }
+            if (southEast)
+            {
+                pixelBuffer[offset + 4] = pathColor;
+                pixelBuffer[offset + width + 3] = pathColor;
+            }
+            if (east)
+            {
+                pixelBuffer[offset + (width * 2) + 3] = pathColor;
+                pixelBuffer[offset + (width * 2) + 4] = pathColor;
+            }
+            if (northEast)
+            {
+                pixelBuffer[offset + (width * 3) + 3] = pathColor;
+                pixelBuffer[offset + (width * 4) + 4] = pathColor;
+            }
+            if (north)
+            {
+                pixelBuffer[offset + (width * 3) + 2] = pathColor;
+                pixelBuffer[offset + (width * 4) + 2] = pathColor;
+            }
+            if (northWest)
+            {
+                pixelBuffer[offset + (width * 3) + 1] = pathColor;
+                pixelBuffer[offset + (width * 4)] = pathColor;
+            }
+            if (west)
+            {
+                pixelBuffer[offset + (width * 2)] = pathColor;
+                pixelBuffer[offset + (width * 2) + 1] = pathColor;
+            }
+            if (southWest)
+            {
+                pixelBuffer[offset] = pathColor;
+                pixelBuffer[offset + width + 1] = pathColor;
+            }
+        }
+
         public static void DrawPath(int offset, int width, Color32 pathColor, ref Color32[] pixelBuffer)
         {
-            bool south = true;
+            bool south = false;
             bool southEast = true;
-            bool east = true;
-            bool northEast = true;
-            bool north = true;
-            bool northWest = true;
-            bool west = true;
+            bool east = false;
+            bool northEast = false;
+            bool north = false;
+            bool northWest = false;
+            bool west = false;
             bool southWest = true;
 
             pixelBuffer[offset + (width * 2) + 2] = pathColor;

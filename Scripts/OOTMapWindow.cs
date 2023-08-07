@@ -31,7 +31,8 @@ namespace OverhauledOverworldTravel
 
         public static Color32 roadColor = new Color32(60, 60, 60, 255);
         public static Color32 trackColor = new Color32(160, 118, 74, 255);
-        public static Color32 testColor = new Color32(255, 0, 0, 255);
+        public static Color32 redColor = new Color32(255, 0, 0, 255);
+        public static Color32 blueColor = new Color32(0, 0, 255, 255);
         public static Color32 blackColor = new Color32(0, 0, 0, 255);
 
         public Vector2 buttonSize = new Vector2(47, 11);
@@ -103,6 +104,16 @@ namespace OverhauledOverworldTravel
         internal bool LocationSelected { get { return locationSelected; } }
 
         internal DaggerfallMessageBox infoBox;
+
+        // Gives index to use with terrainMovementModifiers[]. Indexed by terrain type, starting with Ocean at index 0.
+        // Also used for getting climate-related indices for dungeon textures.
+        public static byte[] climateIndices = { 0, 0, 0, 1, 2, 3, 4, 5, 5, 5 };
+
+        // Used in calculating travel cost
+        int pixelsTraveledOnOcean = 0;
+
+        DFPosition endPos = new DFPosition(109, 158);
+        public DFPosition EndPos { get { return endPos; } protected internal set { endPos = value; } }
 
         // Hidden Map Locations mod data structures.
         protected HashSet<ContentReader.MapSummary> discoveredMapSummaries;
@@ -499,6 +510,9 @@ namespace OverhauledOverworldTravel
                 if (position.x < 0 || position.x > regionTextureOverlayPanelRect.width || position.y < 0 || position.y > regionTextureOverlayPanelRect.height)
                     return;
 
+                EndPos = GetClickMPCoords();
+                UpdateMapLocationDotsTexture();
+
                 if (popUp == null)
                 {
                     popUp = (DaggerfallTravelPopUp)UIWindowFactory.GetInstanceWithArgs(UIWindowType.TravelPopUp, new object[] { uiManager, uiManager.TopWindow, this });
@@ -587,6 +601,11 @@ namespace OverhauledOverworldTravel
             scale = GetRegionMapScale(selectedRegion);
             Array.Clear(locationDotsPixelBuffer, 0, locationDotsPixelBuffer.Length);
             Array.Clear(locationDotsOutlinePixelBuffer, 0, locationDotsOutlinePixelBuffer.Length);
+
+            DFPosition playerPOS = TravelTimeCalculator.GetPlayerTravelPosition();
+            DFPosition clickedPOS = EndPos;
+            List<DFPosition> pixelsList = FindPixelsBetweenPlayerAndDest(clickedPOS);
+
             for (int y = 0; y < height; y++)
             {
                 for (int x = 0; x < width; x++)
@@ -611,13 +630,24 @@ namespace OverhauledOverworldTravel
                         DrawPath(offset5, width5, pathsData[path_roads][pIdx], roadColor, ref locationDotsPixelBuffer);*/
                     //Debug.LogFormat("Found path at x:{0} y:{1}  index:{2}", originX + x, originY + y, rIdx);
 
-                    //if (y % 1 == 0 || x % 1 == 0)
-                        //DrawPath(offset5, width5, blackColor, ref locationDotsPixelBuffer); // My testing stuff right now. Work on this more tomorrow.
-
-                    DFPosition playerPOS = TravelTimeCalculator.GetPlayerTravelPosition();
+                    /*foreach (DFPosition pixelPos in pixelsList)
+                    {
+                        if (originY + y == pixelPos.Y && originX + x == pixelPos.X)
+                            DrawPathLine(offset5, width5, blueColor, ref locationDotsPixelBuffer); // My testing stuff right now. Work on this more tomorrow.
+                    }
 
                     if (originY + y == playerPOS.Y && originX + x == playerPOS.X)
                         DrawPlayerPosition(offset5, width5, blackColor, ref locationDotsPixelBuffer); // My testing stuff right now. Work on this more tomorrow.
+
+                    if (originY + y == clickedPOS.Y && originX + x == clickedPOS.X)
+                        DrawPlayerPosition(offset5, width5, redColor, ref locationDotsPixelBuffer); // My testing stuff right now. Work on this more tomorrow.*/
+
+                    /*DFPosition midpointMainPOS = new DFPosition();
+                    midpointMainPOS.Y = (playerPOS.Y + clickedPOS.Y) / 2;
+                    midpointMainPOS.X = (playerPOS.X + clickedPOS.X) / 2;
+
+                    if (originY + y == midpointMainPOS.Y && originX + x == midpointMainPOS.X)
+                        DrawPlayerPosition(offset5, width5, blueColor, ref locationDotsPixelBuffer); // My testing stuff right now. Work on this more tomorrow.*/
 
                     ContentReader.MapSummary summary;
                     if (DaggerfallUnity.ContentReader.HasLocation(originX + x, originY + y, out summary))
@@ -636,6 +666,21 @@ namespace OverhauledOverworldTravel
                 }
             }
 
+            int widthMulti5 = width * 5;
+            int offsetMulti5 = 0;
+
+            foreach (DFPosition pixelPos in pixelsList)
+            {
+                offsetMulti5 = (int)((((height - (pixelPos.Y - originY) - 1) * 5 * widthMulti5) + ((pixelPos.X - originX) * 5)) * scale);
+                DrawPathLine(offsetMulti5, widthMulti5, blueColor, ref locationDotsPixelBuffer); // My testing stuff right now. Work on this more tomorrow.
+            }
+
+            offsetMulti5 = (int)((((height - (playerPOS.Y - originY) - 1) * 5 * widthMulti5) + ((playerPOS.X - originX) * 5)) * scale);
+            DrawPlayerPosition(offsetMulti5, widthMulti5, blackColor, ref locationDotsPixelBuffer); // My testing stuff right now. Work on this more tomorrow.
+
+            offsetMulti5 = (int)((((height - (clickedPOS.Y - originY) - 1) * 5 * widthMulti5) + ((clickedPOS.X - originX) * 5)) * scale);
+            DrawPlayerPosition(offsetMulti5, widthMulti5, redColor, ref locationDotsPixelBuffer); // My testing stuff right now. Work on this more tomorrow.
+
             // Apply updated color array to texture
             if (DaggerfallUnity.Settings.TravelMapLocationsOutline)
             {
@@ -651,6 +696,171 @@ namespace OverhauledOverworldTravel
                     regionLocationDotsOutlinesOverlayPanel[i].BackgroundTexture = locationDotsOutlineTexture;
             regionLocationDotsOverlayPanel.BackgroundTexture = locationDotsTexture;
         }
+
+        public List<DFPosition> FindPixelsBetweenPlayerAndDest(DFPosition endPos)
+        {
+            List<DFPosition> pixelsList = new List<DFPosition>();
+            DFPosition position = TravelTimeCalculator.GetPlayerTravelPosition();
+            int playerXMapPixel = position.X;
+            int playerYMapPixel = position.Y;
+            int distanceXMapPixels = endPos.X - playerXMapPixel;
+            int distanceYMapPixels = endPos.Y - playerYMapPixel;
+            int distanceXMapPixelsAbs = Mathf.Abs(distanceXMapPixels);
+            int distanceYMapPixelsAbs = Mathf.Abs(distanceYMapPixels);
+            int furthestOfXandYDistance = 0;
+
+            if (distanceXMapPixelsAbs <= distanceYMapPixelsAbs)
+                furthestOfXandYDistance = distanceYMapPixelsAbs;
+            else
+                furthestOfXandYDistance = distanceXMapPixelsAbs;
+
+            int xPixelMovementDirection = (distanceXMapPixels >= 0) ? 1 : -1;
+            int yPixelMovementDirection = (distanceYMapPixels >= 0) ? 1 : -1;
+
+            int numberOfMovements = 0;
+            int shorterOfXandYDistanceIncrementer = 0;
+
+            MapsFile mapsFile = DaggerfallUnity.Instance.ContentReader.MapFileReader;
+            pixelsTraveledOnOcean = 0;
+
+            while (numberOfMovements < furthestOfXandYDistance)
+            {
+                DFPosition pixelPos = new DFPosition();
+
+                if (furthestOfXandYDistance == distanceXMapPixelsAbs)
+                {
+                    playerXMapPixel += xPixelMovementDirection;
+                    shorterOfXandYDistanceIncrementer += distanceYMapPixelsAbs;
+
+                    if (shorterOfXandYDistanceIncrementer > distanceXMapPixelsAbs)
+                    {
+                        shorterOfXandYDistanceIncrementer -= distanceXMapPixelsAbs;
+                        playerYMapPixel += yPixelMovementDirection;
+                    }
+                }
+                else
+                {
+                    playerYMapPixel += yPixelMovementDirection;
+                    shorterOfXandYDistanceIncrementer += distanceXMapPixelsAbs;
+
+                    if (shorterOfXandYDistanceIncrementer > distanceYMapPixelsAbs)
+                    {
+                        shorterOfXandYDistanceIncrementer -= distanceYMapPixelsAbs;
+                        playerXMapPixel += xPixelMovementDirection;
+                    }
+                }
+
+                int terrain = mapsFile.GetClimateIndex(playerXMapPixel, playerYMapPixel);
+                if (terrain == (int)MapsFile.Climates.Ocean)
+                {
+                    ++pixelsTraveledOnOcean;
+                }
+
+                pixelPos.Y = playerYMapPixel;
+                pixelPos.X = playerXMapPixel;
+
+                pixelsList.Add(pixelPos);
+
+                ++numberOfMovements;
+            }
+
+            return pixelsList;
+        }
+
+        /*public int CalculatePo(DFPosition endPos,
+            bool speedCautious = false,
+            bool sleepModeInn = false,
+            bool travelShip = false,
+            bool hasHorse = false,
+            bool hasCart = false)
+        {
+            int transportModifier = 0;
+            if (hasHorse)
+                transportModifier = 128;
+            else if (hasCart)
+                transportModifier = 192;
+            else
+                transportModifier = 256;
+
+            DFPosition position = TravelTimeCalculator.GetPlayerTravelPosition();
+            int playerXMapPixel = position.X;
+            int playerYMapPixel = position.Y;
+            int distanceXMapPixels = endPos.X - playerXMapPixel;
+            int distanceYMapPixels = endPos.Y - playerYMapPixel;
+            int distanceXMapPixelsAbs = Mathf.Abs(distanceXMapPixels);
+            int distanceYMapPixelsAbs = Mathf.Abs(distanceYMapPixels);
+            int furthestOfXandYDistance = 0;
+
+            if (distanceXMapPixelsAbs <= distanceYMapPixelsAbs)
+                furthestOfXandYDistance = distanceYMapPixelsAbs;
+            else
+                furthestOfXandYDistance = distanceXMapPixelsAbs;
+
+            int xPixelMovementDirection = (distanceXMapPixels >= 0) ? 1 : -1;
+            int yPixelMovementDirection = (distanceYMapPixels >= 0) ? 1 : -1;
+
+            int numberOfMovements = 0;
+            int shorterOfXandYDistanceIncrementer = 0;
+
+            int minutesTakenThisMove = 0;
+            int minutesTakenTotal = 0;
+
+            MapsFile mapsFile = DaggerfallUnity.Instance.ContentReader.MapFileReader;
+            pixelsTraveledOnOcean = 0;
+
+            while (numberOfMovements < furthestOfXandYDistance)
+            {
+                if (furthestOfXandYDistance == distanceXMapPixelsAbs)
+                {
+                    playerXMapPixel += xPixelMovementDirection;
+                    shorterOfXandYDistanceIncrementer += distanceYMapPixelsAbs;
+
+                    if (shorterOfXandYDistanceIncrementer > distanceXMapPixelsAbs)
+                    {
+                        shorterOfXandYDistanceIncrementer -= distanceXMapPixelsAbs;
+                        playerYMapPixel += yPixelMovementDirection;
+                    }
+                }
+                else
+                {
+                    playerYMapPixel += yPixelMovementDirection;
+                    shorterOfXandYDistanceIncrementer += distanceXMapPixelsAbs;
+
+                    if (shorterOfXandYDistanceIncrementer > distanceYMapPixelsAbs)
+                    {
+                        shorterOfXandYDistanceIncrementer -= distanceYMapPixelsAbs;
+                        playerXMapPixel += xPixelMovementDirection;
+                    }
+                }
+
+                int terrainMovementIndex = 0;
+                int terrain = mapsFile.GetClimateIndex(playerXMapPixel, playerYMapPixel);
+                if (terrain == (int)MapsFile.Climates.Ocean)
+                {
+                    ++pixelsTraveledOnOcean;
+                    if (travelShip)
+                        minutesTakenThisMove = 51;
+                    else
+                        minutesTakenThisMove = 255;
+                }
+                else
+                {
+                    terrainMovementIndex = climateIndices[terrain - (int)MapsFile.Climates.Ocean];
+                    minutesTakenThisMove = (((102 * transportModifier) >> 8)
+                        * (256 - terrainMovementModifiers[terrainMovementIndex] + 256)) >> 8;
+                }
+
+                if (!sleepModeInn)
+                    minutesTakenThisMove = (300 * minutesTakenThisMove) >> 8;
+                minutesTakenTotal += minutesTakenThisMove;
+                ++numberOfMovements;
+            }
+
+            if (!speedCautious)
+                minutesTakenTotal = minutesTakenTotal >> 1;
+
+            return minutesTakenTotal;
+        }*/
 
         void DrawLocation(int offset, int width, Color32 color, bool large, ref Color32[] pixelBuffer, bool highlight = false)
         {
@@ -687,6 +897,90 @@ namespace OverhauledOverworldTravel
             return locationType == DFRegion.LocationTypes.TownCity || locationType == DFRegion.LocationTypes.TownHamlet || onlyLargeDots;
         }
 
+        public static void DrawPathLine(int offset, int width, Color32 pathColor, ref Color32[] pixelBuffer)
+        {
+            bool south = false;
+            bool southEast = true;
+            bool east = false;
+            bool northEast = false;
+            bool north = false;
+            bool northWest = true;
+            bool west = false;
+            bool southWest = false;
+
+            if (offset < 0)
+            {
+                Debug.LogFormat("Index value is negative: offset = {0}", offset);
+                return;
+            }
+
+            if (offset >= 1280000)
+            {
+                Debug.LogFormat("Offset value is outside bounds of pixelBuffer array: offset = {0}", offset);
+                return;
+            }
+
+            if (offset + (width * 2) + 2 >= 1280000) // Seems to happen when clicking outside game window, to say clear the debug-log in the Unity Editor, not certain why or if this would even be an issue in live.
+            {
+                Debug.LogFormat("Offset value is outside bounds of pixelBuffer array, when added to width: offset = {0}", offset + (width * 2) + 2);
+                return;
+            }
+
+            if (offset + (width * 3) + 3 >= 1280000) // Seems to happen when clicking outside game window, to say clear the debug-log in the Unity Editor, not certain why or if this would even be an issue in live.
+            {
+                Debug.LogFormat("Offset value is outside bounds of pixelBuffer array, when added to width: offset = {0}", offset + (width * 3) + 3);
+                return;
+            }
+
+            if (offset + (width * 4) + 4 >= 1280000) // Seems to happen when clicking outside game window, to say clear the debug-log in the Unity Editor, not certain why or if this would even be an issue in live.
+            {
+                Debug.LogFormat("Offset value is outside bounds of pixelBuffer array, when added to width: offset = {0}", offset + (width * 4) + 4);
+                return;
+            }
+
+            pixelBuffer[offset + (width * 2) + 2] = pathColor;
+            if (south)
+            {
+                pixelBuffer[offset + 2] = pathColor;
+                pixelBuffer[offset + width + 2] = pathColor;
+            }
+            if (southEast)
+            {
+                pixelBuffer[offset + 4] = pathColor;
+                pixelBuffer[offset + width + 3] = pathColor;
+            }
+            if (east)
+            {
+                pixelBuffer[offset + (width * 2) + 3] = pathColor;
+                pixelBuffer[offset + (width * 2) + 4] = pathColor;
+            }
+            if (northEast)
+            {
+                pixelBuffer[offset + (width * 3) + 3] = pathColor;
+                pixelBuffer[offset + (width * 4) + 4] = pathColor;
+            }
+            if (north)
+            {
+                pixelBuffer[offset + (width * 3) + 2] = pathColor;
+                pixelBuffer[offset + (width * 4) + 2] = pathColor;
+            }
+            if (northWest)
+            {
+                pixelBuffer[offset + (width * 3) + 1] = pathColor;
+                pixelBuffer[offset + (width * 4)] = pathColor;
+            }
+            if (west)
+            {
+                pixelBuffer[offset + (width * 2)] = pathColor;
+                pixelBuffer[offset + (width * 2) + 1] = pathColor;
+            }
+            if (southWest)
+            {
+                pixelBuffer[offset] = pathColor;
+                pixelBuffer[offset + width + 1] = pathColor;
+            }
+        }
+
         public static void DrawPlayerPosition(int offset, int width, Color32 pathColor, ref Color32[] pixelBuffer)
         {
             bool south = false;
@@ -697,6 +991,36 @@ namespace OverhauledOverworldTravel
             bool northWest = true;
             bool west = false;
             bool southWest = true;
+
+            if (offset < 0)
+            {
+                Debug.LogFormat("Index value is negative: offset = {0}", offset);
+                return;
+            }
+
+            if (offset >= 1280000)
+            {
+                Debug.LogFormat("Offset value is outside bounds of pixelBuffer array: offset = {0}", offset);
+                return;
+            }
+
+            if (offset + (width * 2) + 2 >= 1280000) // Seems to happen when clicking outside game window, to say clear the debug-log in the Unity Editor, not certain why or if this would even be an issue in live.
+            {
+                Debug.LogFormat("Offset value is outside bounds of pixelBuffer array, when added to width: offset = {0}", offset + (width * 2) + 2);
+                return;
+            }
+
+            if (offset + (width * 3) + 3 >= 1280000) // Seems to happen when clicking outside game window, to say clear the debug-log in the Unity Editor, not certain why or if this would even be an issue in live.
+            {
+                Debug.LogFormat("Offset value is outside bounds of pixelBuffer array, when added to width: offset = {0}", offset + (width * 3) + 3);
+                return;
+            }
+
+            if (offset + (width * 4) + 4 >= 1280000) // Seems to happen when clicking outside game window, to say clear the debug-log in the Unity Editor, not certain why or if this would even be an issue in live.
+            {
+                Debug.LogFormat("Offset value is outside bounds of pixelBuffer array, when added to width: offset = {0}", offset + (width * 4) + 4);
+                return;
+            }
 
             pixelBuffer[offset + (width * 2) + 2] = pathColor;
             if (south)
@@ -860,7 +1184,7 @@ namespace OverhauledOverworldTravel
                     if (showPaths[path_roads])
                         DrawPath(offset5, width5, pathsData[path_roads][pIdx], roadColor, ref pixelBuffer);*/
 
-                    DrawPath(offset5, width5, testColor, ref pixelBuffer); // My testing stuff right now.
+                    DrawPath(offset5, width5, redColor, ref pixelBuffer); // My testing stuff right now.
 
                     ContentReader.MapSummary summary;
                     if (DaggerfallUnity.Instance.ContentReader.HasLocation(mpX, mpY, out summary))

@@ -669,6 +669,28 @@ namespace OverhauledOverworldTravel
             int widthMulti5 = width * 5;
             int offsetMulti5 = 0;
 
+            // Draw a pixel cock on the Daggerfall region map
+            /*offsetMulti5 = (int)((((height - (163 - originY) - 1) * 5 * widthMulti5) + ((128 - originX) * 5)) * scale);
+            DrawPixelCock(offsetMulti5, widthMulti5, redColor, ref locationDotsPixelBuffer, 0);
+
+            offsetMulti5 = (int)((((height - (163 - originY) - 1) * 5 * widthMulti5) + ((129 - originX) * 5)) * scale);
+            DrawPixelCock(offsetMulti5, widthMulti5, redColor, ref locationDotsPixelBuffer, 1);
+
+            offsetMulti5 = (int)((((height - (163 - originY) - 1) * 5 * widthMulti5) + ((130 - originX) * 5)) * scale);
+            DrawPixelCock(offsetMulti5, widthMulti5, redColor, ref locationDotsPixelBuffer, 2);
+
+            offsetMulti5 = (int)((((height - (162 - originY) - 1) * 5 * widthMulti5) + ((128 - originX) * 5)) * scale);
+            DrawPixelCock(offsetMulti5, widthMulti5, redColor, ref locationDotsPixelBuffer, 3);
+
+            offsetMulti5 = (int)((((height - (162 - originY) - 1) * 5 * widthMulti5) + ((129 - originX) * 5)) * scale);
+            DrawPixelCock(offsetMulti5, widthMulti5, redColor, ref locationDotsPixelBuffer, 4);
+
+            offsetMulti5 = (int)((((height - (162 - originY) - 1) * 5 * widthMulti5) + ((130 - originX) * 5)) * scale);
+            DrawPixelCock(offsetMulti5, widthMulti5, redColor, ref locationDotsPixelBuffer, 5);
+
+            offsetMulti5 = (int)((((height - (161 - originY) - 1) * 5 * widthMulti5) + ((129 - originX) * 5)) * scale);
+            DrawPixelCock(offsetMulti5, widthMulti5, redColor, ref locationDotsPixelBuffer, 6);*/
+
             foreach (DFPosition pixelPos in pixelsList)
             {
                 offsetMulti5 = (int)((((height - (pixelPos.Y - originY) - 1) * 5 * widthMulti5) + ((pixelPos.X - originX) * 5)) * scale);
@@ -678,8 +700,26 @@ namespace OverhauledOverworldTravel
             offsetMulti5 = (int)((((height - (playerPOS.Y - originY) - 1) * 5 * widthMulti5) + ((playerPOS.X - originX) * 5)) * scale);
             DrawPlayerPosition(offsetMulti5, widthMulti5, blackColor, ref locationDotsPixelBuffer); // My testing stuff right now. Work on this more tomorrow.
 
-            offsetMulti5 = (int)((((height - (clickedPOS.Y - originY) - 1) * 5 * widthMulti5) + ((clickedPOS.X - originX) * 5)) * scale);
-            DrawPlayerPosition(offsetMulti5, widthMulti5, redColor, ref locationDotsPixelBuffer); // My testing stuff right now. Work on this more tomorrow.
+            //offsetMulti5 = (int)((((height - (clickedPOS.Y - originY) - 1) * 5 * widthMulti5) + ((clickedPOS.X - originX) * 5)) * scale);
+            //DrawPlayerPosition(offsetMulti5, widthMulti5, redColor, ref locationDotsPixelBuffer); // My testing stuff right now. Work on this more tomorrow.
+
+            // Draw Classic Fallout system "Destination Crosshair" 15x15 sprite-sheet drawn method, where the player last clicked
+            for (int i = 0; i < 9; i++) // Might need to change to 8, will see.
+            {
+                if (i >= 0 && i <= 2) // Top Row
+                {
+                    offsetMulti5 = (int)((((height - ((clickedPOS.Y - 1) - originY) - 1) * 5 * widthMulti5) + (((clickedPOS.X + (i - 1)) - originX) * 5)) * scale);
+                }
+                else if (i >= 3 && i <= 5) // Middle Row
+                {
+                    offsetMulti5 = (int)((((height - (clickedPOS.Y - originY) - 1) * 5 * widthMulti5) + (((clickedPOS.X + (i - 4)) - originX) * 5)) * scale);
+                }
+                else // Bottom Row
+                {
+                    offsetMulti5 = (int)((((height - ((clickedPOS.Y + 1) - originY) - 1) * 5 * widthMulti5) + (((clickedPOS.X + (i - 7)) - originX) * 5)) * scale);
+                }
+                DrawDestinationCrosshair(offsetMulti5, widthMulti5, redColor, ref locationDotsPixelBuffer, i);
+            }
 
             // Apply updated color array to texture
             if (DaggerfallUnity.Settings.TravelMapLocationsOutline)
@@ -895,6 +935,147 @@ namespace OverhauledOverworldTravel
         bool IsLocationLarge(DFRegion.LocationTypes locationType)
         {
             return locationType == DFRegion.LocationTypes.TownCity || locationType == DFRegion.LocationTypes.TownHamlet || onlyLargeDots;
+        }
+
+        public static void DrawDestinationCrosshair(int offset, int width, Color32 pathColor, ref Color32[] pixelBuffer, int part)
+        {
+            if (part == 0 || part == 8)
+            {
+                // Top Left or Bottom Right
+                pixelBuffer[offset + (width * 4) + 3] = pathColor;
+                pixelBuffer[offset + (width * 4) + 4] = pathColor;
+                pixelBuffer[offset + (width * 3) + 4] = pathColor;
+                pixelBuffer[offset + width] = pathColor;
+                pixelBuffer[offset] = pathColor;
+                pixelBuffer[offset + 1] = pathColor;
+            }
+            else if (part == 1)
+            {
+                // Top Middle
+                for (int i = 0; i < 5; i++) { pixelBuffer[offset + (width * 4) + i] = pathColor; }
+                for (int i = 0; i < 5; i++) { pixelBuffer[offset + (width * 3) + i] = pathColor; }
+                for (int i = 0; i < 5; i++) { pixelBuffer[offset + (width * 2) + i] = pathColor; }
+                for (int i = 1; i < 4; i++) { pixelBuffer[offset + width + i] = pathColor; }
+                pixelBuffer[offset + 2] = pathColor;
+            }
+            else if (part == 2 || part == 6)
+            {
+                // Top Right or Bottom Left
+                pixelBuffer[offset + (width * 4)] = pathColor;
+                pixelBuffer[offset + (width * 4) + 1] = pathColor;
+                pixelBuffer[offset + (width * 3)] = pathColor;
+                pixelBuffer[offset + width + 4] = pathColor;
+                pixelBuffer[offset + 3] = pathColor;
+                pixelBuffer[offset + 4] = pathColor;
+            }
+            else if (part == 3)
+            {
+                // Left
+                for (int i = 0; i < 3; i++) { pixelBuffer[offset + (width * 4) + i] = pathColor; }
+                for (int i = 0; i < 4; i++) { pixelBuffer[offset + (width * 3) + i] = pathColor; }
+                for (int i = 0; i < 5; i++) { pixelBuffer[offset + (width * 2) + i] = pathColor; }
+                for (int i = 0; i < 4; i++) { pixelBuffer[offset + width + i] = pathColor; }
+                for (int i = 0; i < 3; i++) { pixelBuffer[offset + i] = pathColor; }
+            }
+            else if (part == 4)
+            {
+                // Middle
+                for (int i = 0; i < 5; i++) { pixelBuffer[offset + (width * 2) + i] = pathColor; }
+                for (int i = 0; i < 5; i++) { pixelBuffer[offset + (width * i) + 2] = pathColor; }
+            }
+            else if (part == 5)
+            {
+                // Right
+                for (int i = 2; i < 5; i++) { pixelBuffer[offset + (width * 4) + i] = pathColor; }
+                for (int i = 1; i < 5; i++) { pixelBuffer[offset + (width * 3) + i] = pathColor; }
+                for (int i = 0; i < 5; i++) { pixelBuffer[offset + (width * 2) + i] = pathColor; }
+                for (int i = 1; i < 5; i++) { pixelBuffer[offset + width + i] = pathColor; }
+                for (int i = 2; i < 5; i++) { pixelBuffer[offset + i] = pathColor; }
+            }
+            else if (part == 7)
+            {
+                // Bottom Middle
+                pixelBuffer[offset + (width * 4) + 2] = pathColor;
+                for (int i = 1; i < 4; i++) { pixelBuffer[offset + (width * 3) + i] = pathColor; }
+                for (int i = 0; i < 5; i++) { pixelBuffer[offset + (width * 2) + i] = pathColor; }
+                for (int i = 0; i < 5; i++) { pixelBuffer[offset + width + i] = pathColor; }
+                for (int i = 0; i < 5; i++) { pixelBuffer[offset + i] = pathColor; }
+            }
+        }
+
+        public static void DrawPixelCock(int offset, int width, Color32 pathColor, ref Color32[] pixelBuffer, int part)
+        {
+            if (part == 0)
+            {
+                // Left Nut
+                pixelBuffer[offset + (width * 4) + 2] = pathColor;
+                pixelBuffer[offset + (width * 3) + 1] = pathColor;
+                pixelBuffer[offset + (width * 2) + 1] = pathColor;
+                pixelBuffer[offset + width + 2] = pathColor;
+                pixelBuffer[offset + 3] = pathColor;
+                pixelBuffer[offset + 4] = pathColor;
+            }
+            if (part == 1)
+            {
+                // Crundle
+                pixelBuffer[offset] = pathColor;
+                pixelBuffer[offset + width + 1] = pathColor;
+                pixelBuffer[offset + (width * 2) + 2] = pathColor;
+                pixelBuffer[offset + width + 3] = pathColor;
+                pixelBuffer[offset + 4] = pathColor;
+            }
+            if (part == 2)
+            {
+                // Right Nut
+                pixelBuffer[offset] = pathColor;
+                pixelBuffer[offset + 1] = pathColor;
+                pixelBuffer[offset + width + 2] = pathColor;
+                pixelBuffer[offset + (width * 2) + 3] = pathColor;
+                pixelBuffer[offset + (width * 3) + 3] = pathColor;
+                pixelBuffer[offset + (width * 4) + 2] = pathColor;
+            }
+            if (part == 3)
+            {
+                // Left Upper Scrotum
+                pixelBuffer[offset + 3] = pathColor;
+                pixelBuffer[offset + 4] = pathColor;
+            }
+            if (part == 4)
+            {
+                // Middle Lower Shaft
+                pixelBuffer[offset] = pathColor;
+                pixelBuffer[offset + 1] = pathColor;
+                pixelBuffer[offset + 3] = pathColor;
+                pixelBuffer[offset + 4] = pathColor;
+                pixelBuffer[offset + width + 1] = pathColor;
+                pixelBuffer[offset + width + 3] = pathColor;
+                pixelBuffer[offset + (width * 2) + 1] = pathColor;
+                pixelBuffer[offset + (width * 2) + 3] = pathColor;
+                pixelBuffer[offset + (width * 3) + 1] = pathColor;
+                pixelBuffer[offset + (width * 3) + 3] = pathColor;
+                pixelBuffer[offset + (width * 4) + 1] = pathColor;
+                pixelBuffer[offset + (width * 4) + 3] = pathColor;
+            }
+            if (part == 5)
+            {
+                // Right Upper Scrotum
+                pixelBuffer[offset] = pathColor;
+                pixelBuffer[offset + 1] = pathColor;
+            }
+            if (part == 6)
+            {
+                // Head
+                pixelBuffer[offset + 1] = pathColor;
+                pixelBuffer[offset + 3] = pathColor;
+                pixelBuffer[offset + (width * 2)] = pathColor;
+                pixelBuffer[offset + (width * 2) + 4] = pathColor;
+                pixelBuffer[offset + (width * 3)] = pathColor;
+                pixelBuffer[offset + (width * 3) + 2] = pathColor;
+                pixelBuffer[offset + (width * 3) + 4] = pathColor;
+                pixelBuffer[offset + (width * 4) + 1] = pathColor;
+                pixelBuffer[offset + (width * 4) + 2] = pathColor;
+                pixelBuffer[offset + (width * 4) + 3] = pathColor;
+            }
         }
 
         public static void DrawPathLine(int offset, int width, Color32 pathColor, ref Color32[] pixelBuffer)

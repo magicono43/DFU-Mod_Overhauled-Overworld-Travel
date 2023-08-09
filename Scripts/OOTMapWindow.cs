@@ -34,6 +34,7 @@ namespace OverhauledOverworldTravel
         public static Color32 redColor = new Color32(255, 0, 0, 255);
         public static Color32 blueColor = new Color32(0, 0, 255, 255);
         public static Color32 blackColor = new Color32(0, 0, 0, 255);
+        public static Color32 whiteColor = new Color32(255, 255, 255, 255);
 
         public Vector2 buttonSize = new Vector2(47, 11);
         public Vector2 portsSize = new Vector2(45, 11);
@@ -104,6 +105,23 @@ namespace OverhauledOverworldTravel
         internal bool LocationSelected { get { return locationSelected; } }
 
         internal DaggerfallMessageBox infoBox;
+
+        protected Panel travelPathOverlayPanel;
+        public Texture2D travelPathTexture;
+        public Color32[] travelPathPixelBuffer;
+
+        public PlayerGPS playerGPS = GameManager.Instance.PlayerGPS;
+
+        public static DFPosition previousPlayerPosition = TravelTimeCalculator.GetPlayerTravelPosition();
+        public static DFPosition nextPlayerPosition = TravelTimeCalculator.GetPlayerTravelPosition();
+        public static DFPosition destinationPosition = TravelTimeCalculator.GetPlayerTravelPosition();
+
+        public static List<DFPosition> currentTravelLinePositionsList = new List<DFPosition>();
+
+        public static bool isPlayerTraveling = false;
+        public static bool hasPlayerPositionChanged = false;
+
+        int travelDelayTimer = 0;
 
         // Gives index to use with terrainMovementModifiers[]. Indexed by terrain type, starting with Ocean at index 0.
         // Also used for getting climate-related indices for dungeon textures.
@@ -188,6 +206,15 @@ namespace OverhauledOverworldTravel
 
                 locationDotsPixelBuffer = new Color32[(int)regionTextureOverlayPanelRect.width * (int)regionTextureOverlayPanelRect.height * 25];
                 locationDotsTexture = new Texture2D((int)regionTextureOverlayPanelRect.width * 5, (int)regionTextureOverlayPanelRect.height * 5, TextureFormat.ARGB32, false);
+
+                // Overlay for the player travel path panel
+                travelPathOverlayPanel = DaggerfallUI.AddPanel(regionTextureOverlayPanelRect, NativePanel);
+                travelPathOverlayPanel.Enabled = false;
+
+                // Setup pixel buffer and texture for player travel path
+                travelPathPixelBuffer = new Color32[(int)regionTextureOverlayPanelRect.width * (int)regionTextureOverlayPanelRect.height * 25];
+                travelPathTexture = new Texture2D((int)regionTextureOverlayPanelRect.width * 5, (int)regionTextureOverlayPanelRect.height * 5, TextureFormat.ARGB32, false);
+                travelPathTexture.filterMode = FilterMode.Point;
             }
         }
 
@@ -315,187 +342,63 @@ namespace OverhauledOverworldTravel
         {
             base.OnPush();
 
-            /*teleportCharge = teleportationTravel && TravelOptionsMod.Instance.TeleportCost;
-
-            // Open to region map if travel UI showing, else check if there's an active destination and ask to resume
-            TravelOptionsMod travelModInstance = TravelOptionsMod.Instance;
-            travelModInstance.DisableJunctionMap();
-            if (travelModInstance.GetTravelControlUI().isShowing)
-            {
-                OpenRegionPanel(GetPlayerRegion());
-            }
-            else if (!string.IsNullOrEmpty(travelModInstance.DestinationName))
-            {
-                Debug.Log("Active destination: " + travelModInstance.DestinationName);
-
-                string resume = string.Format(MsgResume, travelModInstance.DestinationName);
-                DaggerfallMessageBox resumeMsgBox = new DaggerfallMessageBox(uiManager, DaggerfallMessageBox.CommonMessageBoxButtons.YesNo, resume, uiManager.TopWindow);
-                resumeMsgBox.OnButtonClick += (_sender, button) =>
-                {
-                    CloseWindow();
-                    if (button == DaggerfallMessageBox.MessageBoxButtons.Yes)
-                    {
-                        CloseWindow();
-                        travelModInstance.BeginTravel();
-                    }
-                };
-                resumeMsgBox.Show();
-            }*/
+            previousPlayerPosition = TravelTimeCalculator.GetPlayerTravelPosition();
+            nextPlayerPosition = TravelTimeCalculator.GetPlayerTravelPosition();
+            destinationPosition = TravelTimeCalculator.GetPlayerTravelPosition();
+            currentTravelLinePositionsList = new List<DFPosition>();
+            isPlayerTraveling = false;
+            hasPlayerPositionChanged = false;
         }
 
         public override void Update()
         {
             base.Update();
 
-            // Had to move this to update and use a control flag since when popping a msg box inside OnPush when indoors the underlying UI is not rendered
-            if (teleportCharge)
+            if ((previousPlayerPosition.Y != destinationPosition.Y) || (previousPlayerPosition.X != destinationPosition.X))
             {
-                ChargeForTeleport();
+                isPlayerTraveling = true;
+            }
+            else
+            {
+                isPlayerTraveling = false;
             }
 
-            if (LocationSelected)
+            if (isPlayerTraveling)
             {
-                if (infoBox == null && Input.GetKey(KeyCode.I))
+                ++travelDelayTimer;
+
+                if (travelDelayTimer >= 25)
                 {
-                    DisplayLocationInfo();
-                    return;
-                }
-            }
-            if (infoBox == null && Input.GetKey(KeyCode.H))
-            {
-                //TravelOptionsMod.Instance.DisplayHelpInfo();
-            }
-        }
+                    travelDelayTimer = 0;
 
-        protected static TextFile.Token newLine = TextFile.CreateFormatToken(TextFile.Formatting.JustifyCenter);
+                    /*DFPosition worldPos = MapsFile.MapPixelToWorldCoord(nextPlayerPosition.X, nextPlayerPosition.Y);
+                    playerGPS.WorldX = worldPos.X;
+                    playerGPS.WorldZ = worldPos.Y;
+                    playerGPS.UpdateWorldInfo();*/
 
-        internal void DisplayLocationInfo()
-        {
-            if (LocationSummary.LocationType == DFRegion.LocationTypes.Coven ||
-                LocationSummary.LocationType == DFRegion.LocationTypes.DungeonKeep ||
-                LocationSummary.LocationType == DFRegion.LocationTypes.DungeonLabyrinth ||
-                LocationSummary.LocationType == DFRegion.LocationTypes.DungeonRuin ||
-                LocationSummary.LocationType == DFRegion.LocationTypes.Graveyard ||
-                LocationSummary.LocationType == DFRegion.LocationTypes.None)
-                return;
-
-            Dictionary<int, PlayerGPS.DiscoveredLocation> discoveryData = GameManager.Instance.PlayerGPS.GetDiscoverySaveData();
-            if (discoveryData.ContainsKey(LocationSummary.ID))
-            {
-                PlayerGPS.DiscoveredLocation discoveredLocation = discoveryData[locationSummary.ID];
-                Dictionary<int, PlayerGPS.DiscoveredBuilding> locBuildings = discoveredLocation.discoveredBuildings;
-                if (locBuildings != null && locBuildings.Count > 0)
-                {
-                    IDictionary<DFLocation.BuildingTypes, int> buildingTypeCounts = new SortedDictionary<DFLocation.BuildingTypes, int>();
-                    List<string> guildNames = new List<string>();
-                    foreach (PlayerGPS.DiscoveredBuilding building in locBuildings.Values)
+                    previousPlayerPosition.Y = nextPlayerPosition.Y;
+                    previousPlayerPosition.X = nextPlayerPosition.X;
+                    if (currentTravelLinePositionsList.Count > 0)
                     {
-                        if (RMBLayout.IsNamedBuilding(building.buildingType))
+                        currentTravelLinePositionsList.RemoveAt(0);
+
+                        if (currentTravelLinePositionsList.Count > 0)
                         {
-                            string guildName = building.displayName.StartsWith("The ") ? building.displayName.Substring(4) : building.displayName;
-                            if (building.buildingType == DFLocation.BuildingTypes.GuildHall && !guildNames.Contains(guildName))
-                                guildNames.Add(guildName);
-
-                            if (building.buildingType != DFLocation.BuildingTypes.GuildHall)
-                                if (buildingTypeCounts.ContainsKey(building.buildingType))
-                                    buildingTypeCounts[building.buildingType]++;
-                                else
-                                    buildingTypeCounts.Add(building.buildingType, 1);
-                        }
-                    }
-                    List<TextFile.Token> tokens = new List<TextFile.Token>();
-                    tokens.Add(new TextFile.Token()
-                    {
-                        text = GetLocationNameInCurrentRegion(locationSummary.MapIndex, true),
-                        formatting = TextFile.Formatting.TextHighlight
-                    });
-                    tokens.Add(newLine);
-                    tokens.Add(newLine);
-
-                    guildNames.Sort();
-                    string guilds = "";
-                    foreach (string guildName in guildNames)
-                    {
-                        if (!string.IsNullOrWhiteSpace(guilds))
-                            guilds += ", ";
-                        guilds += guildName;
-                    }
-                    TextFile.Token tab1 = TextFile.TabToken;
-                    tab1.x = 60;
-                    TextFile.Token tab2 = TextFile.TabToken;
-                    tab2.x = 140;
-                    TextFile.Token tab3 = TextFile.TabToken;
-                    tab3.x = 200;
-                    if (!string.IsNullOrWhiteSpace(guilds))
-                    {
-                        tokens.Add(TextFile.CreateTextToken("Guild Halls:    " + guilds));
-                    }
-                    tokens.Add(newLine);
-                    tokens.Add(TextFile.NewLineToken);
-
-                    bool secondColumn = false;
-                    foreach (DFLocation.BuildingTypes buildingType in buildingTypeCounts.Keys)
-                    {
-                        tokens.Add(TextFile.CreateTextToken(buildingType.ToString()));
-                        tokens.Add(!secondColumn ? tab1 : tab3);
-                        tokens.Add(TextFile.CreateTextToken(buildingTypeCounts[buildingType].ToString()));
-                        if (!secondColumn)
-                            tokens.Add(tab2);
-                        else
-                            tokens.Add(TextFile.NewLineToken);
-                        secondColumn = !secondColumn;
-                    }
-
-                    infoBox = new DaggerfallMessageBox(uiManager, this);
-                    infoBox.ClickAnywhereToClose = true;
-                    infoBox.SetHighlightColor(Color.white);
-                    infoBox.SetTextTokens(tokens.ToArray());
-                    infoBox.OnClose += InfoBox_Close;
-                    infoBox.Show();
-
-                    return;
-                }
-            }
-            DaggerfallUI.MessageBox("You have no knowledge of " + GetLocationNameInCurrentRegion(locationSummary.MapIndex, true) + ".");
-        }
-
-        protected void InfoBox_Close()
-        {
-            infoBox = null;
-        }
-
-        private void ChargeForTeleport()
-        {
-            MagesGuild magesGuild = (MagesGuild)GameManager.Instance.GuildManager.GetGuild(FactionFile.GuildGroups.MagesGuild);
-            int underWizard = 8 - magesGuild.Rank;
-            if (underWizard > 0)
-            {
-                int cost = underWizard * 200;
-                if (GameManager.Instance.PlayerEntity.GetGoldAmount() >= cost)
-                {
-                    string costMsg = string.Format(MsgTeleportCost, cost);
-                    DaggerfallMessageBox payMsgBox = new DaggerfallMessageBox(uiManager, DaggerfallMessageBox.CommonMessageBoxButtons.YesNo, costMsg, uiManager.TopWindow);
-                    payMsgBox.OnButtonClick += (_sender, button) =>
-                    {
-                        CloseWindow();
-                        if (button == DaggerfallMessageBox.MessageBoxButtons.Yes)
-                        {
-                            GameManager.Instance.PlayerEntity.DeductGoldAmount(cost);
+                            nextPlayerPosition.Y = currentTravelLinePositionsList[0].Y;
+                            nextPlayerPosition.X = currentTravelLinePositionsList[0].X;
                         }
                         else
                         {
-                            CloseWindow();
+                            nextPlayerPosition.Y = destinationPosition.Y;
+                            nextPlayerPosition.X = destinationPosition.X;
+                            previousPlayerPosition.Y = nextPlayerPosition.Y;
+                            previousPlayerPosition.X = nextPlayerPosition.X;
                         }
-                    };
-                    payMsgBox.Show();
-                }
-                else
-                {
-                    CloseWindow();
-                    DaggerfallUI.MessageBox(notEnoughGoldId);
+                    }
+
+                    UpdatePlayerTravelDotsTexture();
                 }
             }
-            teleportCharge = false;
         }
 
         // Handle clicks on the main panel
@@ -511,6 +414,17 @@ namespace OverhauledOverworldTravel
                     return;
 
                 EndPos = GetClickMPCoords();
+
+                previousPlayerPosition = TravelTimeCalculator.GetPlayerTravelPosition();
+                destinationPosition = EndPos;
+                currentTravelLinePositionsList = FindPixelsBetweenPlayerAndDest(destinationPosition);
+                if (currentTravelLinePositionsList.Count > 0)
+                {
+                    nextPlayerPosition.Y = currentTravelLinePositionsList[0].Y;
+                    nextPlayerPosition.X = currentTravelLinePositionsList[0].X;
+                }
+
+                UpdatePlayerTravelDotsTexture();
                 UpdateMapLocationDotsTexture();
 
                 if (popUp == null)
@@ -518,7 +432,7 @@ namespace OverhauledOverworldTravel
                     popUp = (DaggerfallTravelPopUp)UIWindowFactory.GetInstanceWithArgs(UIWindowType.TravelPopUp, new object[] { uiManager, uiManager.TopWindow, this });
                 }
                 //((TravelOptionsPopUp)popUp).EndPos = GetClickMPCoords();
-                uiManager.PushWindow(popUp);
+                //uiManager.PushWindow(popUp);
             }
             else
             {
@@ -580,11 +494,67 @@ namespace OverhauledOverworldTravel
             if (selectedRegion != 61)
             {
                 UpdateMapLocationDotsTextureWithPaths();
+                UpdatePlayerTravelDotsTexture();
             }
             else
             {
                 base.UpdateMapLocationDotsTexture();
             }
+        }
+
+        protected virtual void UpdatePlayerTravelDotsTexture()
+        {
+            // Get map and dimensions
+            string mapName = selectedRegionMapNames[mapIndex];
+            Vector2 origin = offsetLookup[mapName];
+            int originX = (int)origin.x;
+            int originY = (int)origin.y;
+            int width = (int)regionTextureOverlayPanelRect.width;
+            int height = (int)regionTextureOverlayPanelRect.height;
+
+            // Plot locations to color array
+            scale = GetRegionMapScale(selectedRegion);
+            Array.Clear(travelPathPixelBuffer, 0, travelPathPixelBuffer.Length);
+
+            int widthMulti5 = width * 5;
+            int offsetMulti5 = 0;
+
+            foreach (DFPosition pixelPos in currentTravelLinePositionsList)
+            {
+                offsetMulti5 = (int)((((height - (pixelPos.Y - originY) - 1) * 5 * widthMulti5) + ((pixelPos.X - originX) * 5)) * scale);
+                DrawPathLine(offsetMulti5, widthMulti5, blueColor, ref travelPathPixelBuffer);
+            }
+
+            offsetMulti5 = (int)((((height - (previousPlayerPosition.Y - originY) - 1) * 5 * widthMulti5) + ((previousPlayerPosition.X - originX) * 5)) * scale);
+            DrawPlayerPosition(offsetMulti5, widthMulti5, whiteColor, ref travelPathPixelBuffer);
+
+            if ((previousPlayerPosition.Y != destinationPosition.Y) || (previousPlayerPosition.X != destinationPosition.X))
+            {
+                // Draw Classic Fallout system "Destination Crosshair" 15x15 sprite-sheet drawn method, where the player last clicked
+                for (int i = 0; i < 9; i++)
+                {
+                    if (i >= 0 && i <= 2) // Top Row
+                    {
+                        offsetMulti5 = (int)((((height - ((destinationPosition.Y - 1) - originY) - 1) * 5 * widthMulti5) + (((destinationPosition.X + (i - 1)) - originX) * 5)) * scale);
+                    }
+                    else if (i >= 3 && i <= 5) // Middle Row
+                    {
+                        offsetMulti5 = (int)((((height - (destinationPosition.Y - originY) - 1) * 5 * widthMulti5) + (((destinationPosition.X + (i - 4)) - originX) * 5)) * scale);
+                    }
+                    else // Bottom Row
+                    {
+                        offsetMulti5 = (int)((((height - ((destinationPosition.Y + 1) - originY) - 1) * 5 * widthMulti5) + (((destinationPosition.X + (i - 7)) - originX) * 5)) * scale);
+                    }
+                    DrawDestinationCrosshair(offsetMulti5, widthMulti5, redColor, ref travelPathPixelBuffer, i);
+                }
+            }
+
+            // Apply updated color array to texture
+            travelPathTexture.SetPixels32(travelPathPixelBuffer);
+            travelPathTexture.Apply();
+
+            // Present texture
+            travelPathOverlayPanel.BackgroundTexture = travelPathTexture;
         }
 
         protected virtual void UpdateMapLocationDotsTextureWithPaths()
@@ -620,35 +590,6 @@ namespace OverhauledOverworldTravel
 
                     int pIdx = originX + x + ((originY + y) * MapsFile.MaxMapPixelX);
 
-                    /*if (showPaths[path_streams])
-                        DrawPath(offset5, width5, pathsData[path_streams][pIdx], streamColor, ref locationDotsPixelBuffer);
-                    if (showPaths[path_tracks])
-                        DrawPath(offset5, width5, pathsData[path_tracks][pIdx], trackColor, ref locationDotsPixelBuffer);
-                    if (showPaths[path_rivers])
-                        DrawPath(offset5, width5, pathsData[path_rivers][pIdx], riverColor, ref locationDotsPixelBuffer);
-                    if (showPaths[path_roads])
-                        DrawPath(offset5, width5, pathsData[path_roads][pIdx], roadColor, ref locationDotsPixelBuffer);*/
-                    //Debug.LogFormat("Found path at x:{0} y:{1}  index:{2}", originX + x, originY + y, rIdx);
-
-                    /*foreach (DFPosition pixelPos in pixelsList)
-                    {
-                        if (originY + y == pixelPos.Y && originX + x == pixelPos.X)
-                            DrawPathLine(offset5, width5, blueColor, ref locationDotsPixelBuffer); // My testing stuff right now. Work on this more tomorrow.
-                    }
-
-                    if (originY + y == playerPOS.Y && originX + x == playerPOS.X)
-                        DrawPlayerPosition(offset5, width5, blackColor, ref locationDotsPixelBuffer); // My testing stuff right now. Work on this more tomorrow.
-
-                    if (originY + y == clickedPOS.Y && originX + x == clickedPOS.X)
-                        DrawPlayerPosition(offset5, width5, redColor, ref locationDotsPixelBuffer); // My testing stuff right now. Work on this more tomorrow.*/
-
-                    /*DFPosition midpointMainPOS = new DFPosition();
-                    midpointMainPOS.Y = (playerPOS.Y + clickedPOS.Y) / 2;
-                    midpointMainPOS.X = (playerPOS.X + clickedPOS.X) / 2;
-
-                    if (originY + y == midpointMainPOS.Y && originX + x == midpointMainPOS.X)
-                        DrawPlayerPosition(offset5, width5, blueColor, ref locationDotsPixelBuffer); // My testing stuff right now. Work on this more tomorrow.*/
-
                     ContentReader.MapSummary summary;
                     if (DaggerfallUnity.ContentReader.HasLocation(originX + x, originY + y, out summary))
                     {
@@ -664,61 +605,6 @@ namespace OverhauledOverworldTravel
                         }
                     }
                 }
-            }
-
-            int widthMulti5 = width * 5;
-            int offsetMulti5 = 0;
-
-            // Draw a pixel cock on the Daggerfall region map
-            /*offsetMulti5 = (int)((((height - (163 - originY) - 1) * 5 * widthMulti5) + ((128 - originX) * 5)) * scale);
-            DrawPixelCock(offsetMulti5, widthMulti5, redColor, ref locationDotsPixelBuffer, 0);
-
-            offsetMulti5 = (int)((((height - (163 - originY) - 1) * 5 * widthMulti5) + ((129 - originX) * 5)) * scale);
-            DrawPixelCock(offsetMulti5, widthMulti5, redColor, ref locationDotsPixelBuffer, 1);
-
-            offsetMulti5 = (int)((((height - (163 - originY) - 1) * 5 * widthMulti5) + ((130 - originX) * 5)) * scale);
-            DrawPixelCock(offsetMulti5, widthMulti5, redColor, ref locationDotsPixelBuffer, 2);
-
-            offsetMulti5 = (int)((((height - (162 - originY) - 1) * 5 * widthMulti5) + ((128 - originX) * 5)) * scale);
-            DrawPixelCock(offsetMulti5, widthMulti5, redColor, ref locationDotsPixelBuffer, 3);
-
-            offsetMulti5 = (int)((((height - (162 - originY) - 1) * 5 * widthMulti5) + ((129 - originX) * 5)) * scale);
-            DrawPixelCock(offsetMulti5, widthMulti5, redColor, ref locationDotsPixelBuffer, 4);
-
-            offsetMulti5 = (int)((((height - (162 - originY) - 1) * 5 * widthMulti5) + ((130 - originX) * 5)) * scale);
-            DrawPixelCock(offsetMulti5, widthMulti5, redColor, ref locationDotsPixelBuffer, 5);
-
-            offsetMulti5 = (int)((((height - (161 - originY) - 1) * 5 * widthMulti5) + ((129 - originX) * 5)) * scale);
-            DrawPixelCock(offsetMulti5, widthMulti5, redColor, ref locationDotsPixelBuffer, 6);*/
-
-            foreach (DFPosition pixelPos in pixelsList)
-            {
-                offsetMulti5 = (int)((((height - (pixelPos.Y - originY) - 1) * 5 * widthMulti5) + ((pixelPos.X - originX) * 5)) * scale);
-                DrawPathLine(offsetMulti5, widthMulti5, blueColor, ref locationDotsPixelBuffer); // My testing stuff right now. Work on this more tomorrow.
-            }
-
-            offsetMulti5 = (int)((((height - (playerPOS.Y - originY) - 1) * 5 * widthMulti5) + ((playerPOS.X - originX) * 5)) * scale);
-            DrawPlayerPosition(offsetMulti5, widthMulti5, blackColor, ref locationDotsPixelBuffer); // My testing stuff right now. Work on this more tomorrow.
-
-            //offsetMulti5 = (int)((((height - (clickedPOS.Y - originY) - 1) * 5 * widthMulti5) + ((clickedPOS.X - originX) * 5)) * scale);
-            //DrawPlayerPosition(offsetMulti5, widthMulti5, redColor, ref locationDotsPixelBuffer); // My testing stuff right now. Work on this more tomorrow.
-
-            // Draw Classic Fallout system "Destination Crosshair" 15x15 sprite-sheet drawn method, where the player last clicked
-            for (int i = 0; i < 9; i++) // Might need to change to 8, will see.
-            {
-                if (i >= 0 && i <= 2) // Top Row
-                {
-                    offsetMulti5 = (int)((((height - ((clickedPOS.Y - 1) - originY) - 1) * 5 * widthMulti5) + (((clickedPOS.X + (i - 1)) - originX) * 5)) * scale);
-                }
-                else if (i >= 3 && i <= 5) // Middle Row
-                {
-                    offsetMulti5 = (int)((((height - (clickedPOS.Y - originY) - 1) * 5 * widthMulti5) + (((clickedPOS.X + (i - 4)) - originX) * 5)) * scale);
-                }
-                else // Bottom Row
-                {
-                    offsetMulti5 = (int)((((height - ((clickedPOS.Y + 1) - originY) - 1) * 5 * widthMulti5) + (((clickedPOS.X + (i - 7)) - originX) * 5)) * scale);
-                }
-                DrawDestinationCrosshair(offsetMulti5, widthMulti5, redColor, ref locationDotsPixelBuffer, i);
             }
 
             // Apply updated color array to texture
@@ -806,101 +692,6 @@ namespace OverhauledOverworldTravel
 
             return pixelsList;
         }
-
-        /*public int CalculatePo(DFPosition endPos,
-            bool speedCautious = false,
-            bool sleepModeInn = false,
-            bool travelShip = false,
-            bool hasHorse = false,
-            bool hasCart = false)
-        {
-            int transportModifier = 0;
-            if (hasHorse)
-                transportModifier = 128;
-            else if (hasCart)
-                transportModifier = 192;
-            else
-                transportModifier = 256;
-
-            DFPosition position = TravelTimeCalculator.GetPlayerTravelPosition();
-            int playerXMapPixel = position.X;
-            int playerYMapPixel = position.Y;
-            int distanceXMapPixels = endPos.X - playerXMapPixel;
-            int distanceYMapPixels = endPos.Y - playerYMapPixel;
-            int distanceXMapPixelsAbs = Mathf.Abs(distanceXMapPixels);
-            int distanceYMapPixelsAbs = Mathf.Abs(distanceYMapPixels);
-            int furthestOfXandYDistance = 0;
-
-            if (distanceXMapPixelsAbs <= distanceYMapPixelsAbs)
-                furthestOfXandYDistance = distanceYMapPixelsAbs;
-            else
-                furthestOfXandYDistance = distanceXMapPixelsAbs;
-
-            int xPixelMovementDirection = (distanceXMapPixels >= 0) ? 1 : -1;
-            int yPixelMovementDirection = (distanceYMapPixels >= 0) ? 1 : -1;
-
-            int numberOfMovements = 0;
-            int shorterOfXandYDistanceIncrementer = 0;
-
-            int minutesTakenThisMove = 0;
-            int minutesTakenTotal = 0;
-
-            MapsFile mapsFile = DaggerfallUnity.Instance.ContentReader.MapFileReader;
-            pixelsTraveledOnOcean = 0;
-
-            while (numberOfMovements < furthestOfXandYDistance)
-            {
-                if (furthestOfXandYDistance == distanceXMapPixelsAbs)
-                {
-                    playerXMapPixel += xPixelMovementDirection;
-                    shorterOfXandYDistanceIncrementer += distanceYMapPixelsAbs;
-
-                    if (shorterOfXandYDistanceIncrementer > distanceXMapPixelsAbs)
-                    {
-                        shorterOfXandYDistanceIncrementer -= distanceXMapPixelsAbs;
-                        playerYMapPixel += yPixelMovementDirection;
-                    }
-                }
-                else
-                {
-                    playerYMapPixel += yPixelMovementDirection;
-                    shorterOfXandYDistanceIncrementer += distanceXMapPixelsAbs;
-
-                    if (shorterOfXandYDistanceIncrementer > distanceYMapPixelsAbs)
-                    {
-                        shorterOfXandYDistanceIncrementer -= distanceYMapPixelsAbs;
-                        playerXMapPixel += xPixelMovementDirection;
-                    }
-                }
-
-                int terrainMovementIndex = 0;
-                int terrain = mapsFile.GetClimateIndex(playerXMapPixel, playerYMapPixel);
-                if (terrain == (int)MapsFile.Climates.Ocean)
-                {
-                    ++pixelsTraveledOnOcean;
-                    if (travelShip)
-                        minutesTakenThisMove = 51;
-                    else
-                        minutesTakenThisMove = 255;
-                }
-                else
-                {
-                    terrainMovementIndex = climateIndices[terrain - (int)MapsFile.Climates.Ocean];
-                    minutesTakenThisMove = (((102 * transportModifier) >> 8)
-                        * (256 - terrainMovementModifiers[terrainMovementIndex] + 256)) >> 8;
-                }
-
-                if (!sleepModeInn)
-                    minutesTakenThisMove = (300 * minutesTakenThisMove) >> 8;
-                minutesTakenTotal += minutesTakenThisMove;
-                ++numberOfMovements;
-            }
-
-            if (!speedCautious)
-                minutesTakenTotal = minutesTakenTotal >> 1;
-
-            return minutesTakenTotal;
-        }*/
 
         void DrawLocation(int offset, int width, Color32 color, bool large, ref Color32[] pixelBuffer, bool highlight = false)
         {
@@ -1003,92 +794,8 @@ namespace OverhauledOverworldTravel
             }
         }
 
-        public static void DrawPixelCock(int offset, int width, Color32 pathColor, ref Color32[] pixelBuffer, int part)
-        {
-            if (part == 0)
-            {
-                // Left Nut
-                pixelBuffer[offset + (width * 4) + 2] = pathColor;
-                pixelBuffer[offset + (width * 3) + 1] = pathColor;
-                pixelBuffer[offset + (width * 2) + 1] = pathColor;
-                pixelBuffer[offset + width + 2] = pathColor;
-                pixelBuffer[offset + 3] = pathColor;
-                pixelBuffer[offset + 4] = pathColor;
-            }
-            if (part == 1)
-            {
-                // Crundle
-                pixelBuffer[offset] = pathColor;
-                pixelBuffer[offset + width + 1] = pathColor;
-                pixelBuffer[offset + (width * 2) + 2] = pathColor;
-                pixelBuffer[offset + width + 3] = pathColor;
-                pixelBuffer[offset + 4] = pathColor;
-            }
-            if (part == 2)
-            {
-                // Right Nut
-                pixelBuffer[offset] = pathColor;
-                pixelBuffer[offset + 1] = pathColor;
-                pixelBuffer[offset + width + 2] = pathColor;
-                pixelBuffer[offset + (width * 2) + 3] = pathColor;
-                pixelBuffer[offset + (width * 3) + 3] = pathColor;
-                pixelBuffer[offset + (width * 4) + 2] = pathColor;
-            }
-            if (part == 3)
-            {
-                // Left Upper Scrotum
-                pixelBuffer[offset + 3] = pathColor;
-                pixelBuffer[offset + 4] = pathColor;
-            }
-            if (part == 4)
-            {
-                // Middle Lower Shaft
-                pixelBuffer[offset] = pathColor;
-                pixelBuffer[offset + 1] = pathColor;
-                pixelBuffer[offset + 3] = pathColor;
-                pixelBuffer[offset + 4] = pathColor;
-                pixelBuffer[offset + width + 1] = pathColor;
-                pixelBuffer[offset + width + 3] = pathColor;
-                pixelBuffer[offset + (width * 2) + 1] = pathColor;
-                pixelBuffer[offset + (width * 2) + 3] = pathColor;
-                pixelBuffer[offset + (width * 3) + 1] = pathColor;
-                pixelBuffer[offset + (width * 3) + 3] = pathColor;
-                pixelBuffer[offset + (width * 4) + 1] = pathColor;
-                pixelBuffer[offset + (width * 4) + 3] = pathColor;
-            }
-            if (part == 5)
-            {
-                // Right Upper Scrotum
-                pixelBuffer[offset] = pathColor;
-                pixelBuffer[offset + 1] = pathColor;
-            }
-            if (part == 6)
-            {
-                // Head
-                pixelBuffer[offset + 1] = pathColor;
-                pixelBuffer[offset + 3] = pathColor;
-                pixelBuffer[offset + (width * 2)] = pathColor;
-                pixelBuffer[offset + (width * 2) + 4] = pathColor;
-                pixelBuffer[offset + (width * 3)] = pathColor;
-                pixelBuffer[offset + (width * 3) + 2] = pathColor;
-                pixelBuffer[offset + (width * 3) + 4] = pathColor;
-                pixelBuffer[offset + (width * 4) + 1] = pathColor;
-                pixelBuffer[offset + (width * 4) + 2] = pathColor;
-                pixelBuffer[offset + (width * 4) + 3] = pathColor;
-            }
-        }
-
         public static void DrawPathLine(int offset, int width, Color32 pathColor, ref Color32[] pixelBuffer)
         {
-            bool south = false;
-            bool southEast = true;
-            bool east = false;
-            bool northEast = false;
-            bool north = false;
-            bool northWest = true;
-            bool west = false;
-            bool southWest = false;
-
             if (offset < 0)
             {
                 Debug.LogFormat("Index value is negative: offset = {0}", offset);
@@ -1119,60 +826,13 @@ namespace OverhauledOverworldTravel
                 return;
             }
 
-            pixelBuffer[offset + (width * 2) + 2] = pathColor;
-            if (south)
-            {
-                pixelBuffer[offset + 2] = pathColor;
-                pixelBuffer[offset + width + 2] = pathColor;
-            }
-            if (southEast)
-            {
-                pixelBuffer[offset + 4] = pathColor;
-                pixelBuffer[offset + width + 3] = pathColor;
-            }
-            if (east)
-            {
-                pixelBuffer[offset + (width * 2) + 3] = pathColor;
-                pixelBuffer[offset + (width * 2) + 4] = pathColor;
-            }
-            if (northEast)
-            {
-                pixelBuffer[offset + (width * 3) + 3] = pathColor;
-                pixelBuffer[offset + (width * 4) + 4] = pathColor;
-            }
-            if (north)
-            {
-                pixelBuffer[offset + (width * 3) + 2] = pathColor;
-                pixelBuffer[offset + (width * 4) + 2] = pathColor;
-            }
-            if (northWest)
-            {
-                pixelBuffer[offset + (width * 3) + 1] = pathColor;
-                pixelBuffer[offset + (width * 4)] = pathColor;
-            }
-            if (west)
-            {
-                pixelBuffer[offset + (width * 2)] = pathColor;
-                pixelBuffer[offset + (width * 2) + 1] = pathColor;
-            }
-            if (southWest)
-            {
-                pixelBuffer[offset] = pathColor;
-                pixelBuffer[offset + width + 1] = pathColor;
-            }
+            for (int i = 1; i < 4; i++) { pixelBuffer[offset + (width * 3) + i] = pathColor; }
+            for (int i = 1; i < 4; i++) { pixelBuffer[offset + (width * 2) + i] = pathColor; }
+            for (int i = 1; i < 4; i++) { pixelBuffer[offset + (width * 1) + i] = pathColor; }
         }
 
         public static void DrawPlayerPosition(int offset, int width, Color32 pathColor, ref Color32[] pixelBuffer)
         {
-            bool south = false;
-            bool southEast = true;
-            bool east = false;
-            bool northEast = true;
-            bool north = false;
-            bool northWest = true;
-            bool west = false;
-            bool southWest = true;
-
             if (offset < 0)
             {
                 Debug.LogFormat("Index value is negative: offset = {0}", offset);
@@ -1203,107 +863,22 @@ namespace OverhauledOverworldTravel
                 return;
             }
 
-            pixelBuffer[offset + (width * 2) + 2] = pathColor;
-            if (south)
-            {
-                pixelBuffer[offset + 2] = pathColor;
-                pixelBuffer[offset + width + 2] = pathColor;
-            }
-            if (southEast)
-            {
-                pixelBuffer[offset + 4] = pathColor;
-                pixelBuffer[offset + width + 3] = pathColor;
-            }
-            if (east)
-            {
-                pixelBuffer[offset + (width * 2) + 3] = pathColor;
-                pixelBuffer[offset + (width * 2) + 4] = pathColor;
-            }
-            if (northEast)
-            {
-                pixelBuffer[offset + (width * 3) + 3] = pathColor;
-                pixelBuffer[offset + (width * 4) + 4] = pathColor;
-            }
-            if (north)
-            {
-                pixelBuffer[offset + (width * 3) + 2] = pathColor;
-                pixelBuffer[offset + (width * 4) + 2] = pathColor;
-            }
-            if (northWest)
-            {
-                pixelBuffer[offset + (width * 3) + 1] = pathColor;
-                pixelBuffer[offset + (width * 4)] = pathColor;
-            }
-            if (west)
-            {
-                pixelBuffer[offset + (width * 2)] = pathColor;
-                pixelBuffer[offset + (width * 2) + 1] = pathColor;
-            }
-            if (southWest)
-            {
-                pixelBuffer[offset] = pathColor;
-                pixelBuffer[offset + width + 1] = pathColor;
-            }
-        }
-
-        public static void DrawPath(int offset, int width, Color32 pathColor, ref Color32[] pixelBuffer)
-        {
-            bool south = false;
-            bool southEast = true;
-            bool east = false;
-            bool northEast = false;
-            bool north = false;
-            bool northWest = false;
-            bool west = false;
-            bool southWest = true;
-
-            pixelBuffer[offset + (width * 2) + 2] = pathColor;
-            if (south)
-            {
-                pixelBuffer[offset + 2] = pathColor;
-                pixelBuffer[offset + width + 2] = pathColor;
-            }
-            if (southEast)
-            {
-                pixelBuffer[offset + 4] = pathColor;
-                pixelBuffer[offset + width + 3] = pathColor;
-            }
-            if (east)
-            {
-                pixelBuffer[offset + (width * 2) + 3] = pathColor;
-                pixelBuffer[offset + (width * 2) + 4] = pathColor;
-            }
-            if (northEast)
-            {
-                pixelBuffer[offset + (width * 3) + 3] = pathColor;
-                pixelBuffer[offset + (width * 4) + 4] = pathColor;
-            }
-            if (north)
-            {
-                pixelBuffer[offset + (width * 3) + 2] = pathColor;
-                pixelBuffer[offset + (width * 4) + 2] = pathColor;
-            }
-            if (northWest)
-            {
-                pixelBuffer[offset + (width * 3) + 1] = pathColor;
-                pixelBuffer[offset + (width * 4)] = pathColor;
-            }
-            if (west)
-            {
-                pixelBuffer[offset + (width * 2)] = pathColor;
-                pixelBuffer[offset + (width * 2) + 1] = pathColor;
-            }
-            if (southWest)
-            {
-                pixelBuffer[offset] = pathColor;
-                pixelBuffer[offset + width + 1] = pathColor;
-            }
+            for (int i = 0; i < 5; i++) { pixelBuffer[offset + (width * 2) + i] = pathColor; }
+            for (int i = 0; i < 5; i++) { pixelBuffer[offset + (width * i) + 2] = pathColor; }
         }
 
         // Zoom and pan region texture
         protected override void ZoomMapTextures()
         {
             base.ZoomMapTextures();
+
+            // Exit cropped rendering
+            if (!RegionSelected || !zoom)
+            {
+                travelPathOverlayPanel.BackgroundTextureLayout = BackgroundLayout.StretchToFill;
+                UpdateBorder();
+                return;
+            }
 
             if (RegionSelected && zoom)
             {
@@ -1327,8 +902,25 @@ namespace OverhauledOverworldTravel
                 Rect locationDotsNewRect = new Rect(startX * 5, startY * 5, width * 5 / zoomfactor, height * 5 / zoomfactor);
                 regionLocationDotsOverlayPanel.BackgroundCroppedRect = locationDotsNewRect;
 
+                travelPathOverlayPanel.BackgroundTextureLayout = BackgroundLayout.Cropped;
+                travelPathOverlayPanel.BackgroundCroppedRect = locationDotsNewRect;
+
                 UpdateBorder();
             }
+        }
+
+        protected override void OpenRegionPanel(int region)
+        {
+            base.OpenRegionPanel(region);
+
+            travelPathOverlayPanel.Enabled = true;
+        }
+
+        protected override void CloseRegionPanel()
+        {
+            base.CloseRegionPanel();
+
+            travelPathOverlayPanel.Enabled = false;
         }
 
         public void DrawMapSection(int originX, int originY, int width, int height, ref Color32[] pixelBuffer, bool circular = false)
@@ -1364,8 +956,6 @@ namespace OverhauledOverworldTravel
                         DrawPath(offset5, width5, pathsData[path_tracks][pIdx], trackColor, ref pixelBuffer);
                     if (showPaths[path_roads])
                         DrawPath(offset5, width5, pathsData[path_roads][pIdx], roadColor, ref pixelBuffer);*/
-
-                    DrawPath(offset5, width5, redColor, ref pixelBuffer); // My testing stuff right now.
 
                     ContentReader.MapSummary summary;
                     if (DaggerfallUnity.Instance.ContentReader.HasLocation(mpX, mpY, out summary))

@@ -122,6 +122,7 @@ namespace OverhauledOverworldTravel
         public static bool hasPlayerPositionChanged = false;
 
         int travelDelayTimer = 0;
+        int startFastTravelTimer = 0;
 
         // Gives index to use with terrainMovementModifiers[]. Indexed by terrain type, starting with Ocean at index 0.
         // Also used for getting climate-related indices for dungeon textures.
@@ -203,6 +204,8 @@ namespace OverhauledOverworldTravel
                     SetupWaterButtons();
                     UpdateWaterButtons();
                 }*/
+
+                // Start adding some basic function buttons here next I work on this, I suppose.
 
                 locationDotsPixelBuffer = new Color32[(int)regionTextureOverlayPanelRect.width * (int)regionTextureOverlayPanelRect.height * 25];
                 locationDotsTexture = new Texture2D((int)regionTextureOverlayPanelRect.width * 5, (int)regionTextureOverlayPanelRect.height * 5, TextureFormat.ARGB32, false);
@@ -354,6 +357,13 @@ namespace OverhauledOverworldTravel
         {
             base.Update();
 
+            if (!RegionSelected)
+            {
+                isPlayerTraveling = false;
+                travelDelayTimer = 0;
+                startFastTravelTimer = 0;
+            }
+
             if ((previousPlayerPosition.Y != destinationPosition.Y) || (previousPlayerPosition.X != destinationPosition.X))
             {
                 isPlayerTraveling = true;
@@ -366,6 +376,7 @@ namespace OverhauledOverworldTravel
             if (isPlayerTraveling)
             {
                 ++travelDelayTimer;
+                startFastTravelTimer = 0;
 
                 if (travelDelayTimer >= 25)
                 {
@@ -399,6 +410,77 @@ namespace OverhauledOverworldTravel
                     UpdatePlayerTravelDotsTexture();
                 }
             }
+            else // Will eventually want a button of some kind to perform this, but for now just a delay when standing in the same spot for long enough on the map, for testing.
+            {
+                ++startFastTravelTimer;
+
+                if (startFastTravelTimer >= 800)
+                {
+                    travelDelayTimer = 0;
+                    startFastTravelTimer = 0;
+
+                    DaggerfallUI.Instance.FadeBehaviour.SmashHUDToBlack();
+                    performFastTravel();
+                }
+            }
+        }
+
+        // perform fast travel actions
+        private void performFastTravel()
+        {
+            //RaiseOnPreFastTravelEvent(); // So for these events, I'm not sure how or if you can "piggy-back" off the existing ones from another class/window, really not sure how that might be done, so for now whatever.
+
+            // Cache scene first, if fast travelling while on ship.
+            if (GameManager.Instance.TransportManager.IsOnShip())
+                DaggerfallWorkshop.Game.Serialization.SaveLoadManager.CacheScene(GameManager.Instance.StreamingWorld.SceneName);
+            GameManager.Instance.StreamingWorld.RestoreWorldCompensationHeight(0);
+            GameManager.Instance.StreamingWorld.TeleportToCoordinates((int)endPos.X, (int)endPos.Y, StreamingWorld.RepositionMethods.DirectionFromStartMarker);
+
+            GameManager.Instance.PlayerEntity.CurrentHealth = GameManager.Instance.PlayerEntity.MaxHealth;
+            GameManager.Instance.PlayerEntity.CurrentFatigue = GameManager.Instance.PlayerEntity.MaxFatigue;
+            if (!GameManager.Instance.PlayerEntity.Career.NoRegenSpellPoints)
+                GameManager.Instance.PlayerEntity.CurrentMagicka = GameManager.Instance.PlayerEntity.MaxMagicka;
+
+            //DaggerfallUnity.WorldTime.DaggerfallDateTime.RaiseTime(travelTimeTotalMins * 60);
+
+            // Halt random enemy spawns for next playerEntity update so player isn't bombarded by spawned enemies at the end of a long trip
+            GameManager.Instance.PlayerEntity.PreventEnemySpawns = true;
+
+            // Vampires and characters with Damage from Sunlight disadvantage never arrive between 6am and 6pm regardless of travel type
+            // Otherwise raise arrival time to just after 7am if cautious travel would arrive at night
+            /*if (GameManager.Instance.PlayerEffectManager.HasVampirism() || GameManager.Instance.PlayerEntity.Career.DamageFromSunlight)
+            {
+                if (DaggerfallUnity.Instance.WorldTime.DaggerfallDateTime.IsDay)
+                {
+                    DaggerfallUnity.Instance.WorldTime.DaggerfallDateTime.RaiseTime(
+                        (DaggerfallDateTime.DuskHour - DaggerfallUnity.Instance.WorldTime.DaggerfallDateTime.Hour) * 3600);
+                }
+            }*/
+            /*if (speedCautious)
+            {
+                if ((DaggerfallUnity.WorldTime.DaggerfallDateTime.Hour < 7)
+                    || ((DaggerfallUnity.WorldTime.DaggerfallDateTime.Hour == 7) && (DaggerfallUnity.WorldTime.DaggerfallDateTime.Minute < 10)))
+                {
+                    float raiseTime = (((7 - DaggerfallUnity.WorldTime.DaggerfallDateTime.Hour) * 3600)
+                                        + ((10 - DaggerfallUnity.WorldTime.DaggerfallDateTime.Minute) * 60)
+                                        - DaggerfallUnity.WorldTime.DaggerfallDateTime.Second);
+                    DaggerfallUnity.WorldTime.DaggerfallDateTime.RaiseTime(raiseTime);
+                }
+                else if (DaggerfallUnity.WorldTime.DaggerfallDateTime.Hour > 17)
+                {
+                    float raiseTime = (((31 - DaggerfallUnity.WorldTime.DaggerfallDateTime.Hour) * 3600)
+                    + ((10 - DaggerfallUnity.WorldTime.DaggerfallDateTime.Minute) * 60)
+                    - DaggerfallUnity.WorldTime.DaggerfallDateTime.Second);
+                    DaggerfallUnity.WorldTime.DaggerfallDateTime.RaiseTime(raiseTime);
+                }
+            }*/
+
+            DaggerfallUI.Instance.UserInterfaceManager.PopWindow();
+            this.CloseTravelWindows(true);
+            GameManager.Instance.PlayerEntity.RaiseSkills();
+            DaggerfallUI.Instance.FadeBehaviour.FadeHUDFromBlack();
+
+            //RaiseOnPostFastTravelEvent();
         }
 
         // Handle clicks on the main panel
@@ -415,7 +497,6 @@ namespace OverhauledOverworldTravel
 
                 EndPos = GetClickMPCoords();
 
-                previousPlayerPosition = TravelTimeCalculator.GetPlayerTravelPosition();
                 destinationPosition = EndPos;
                 currentTravelLinePositionsList = FindPixelsBetweenPlayerAndDest(destinationPosition);
                 if (currentTravelLinePositionsList.Count > 0)
@@ -525,6 +606,7 @@ namespace OverhauledOverworldTravel
                 DrawPathLine(offsetMulti5, widthMulti5, blueColor, ref travelPathPixelBuffer);
             }
 
+            // Draw larger "Player Position Crosshair" where the player is meant to currently be
             offsetMulti5 = (int)((((height - (previousPlayerPosition.Y - originY) - 1) * 5 * widthMulti5) + ((previousPlayerPosition.X - originX) * 5)) * scale);
             DrawPlayerPosition(offsetMulti5, widthMulti5, whiteColor, ref travelPathPixelBuffer);
 
@@ -572,7 +654,7 @@ namespace OverhauledOverworldTravel
             Array.Clear(locationDotsPixelBuffer, 0, locationDotsPixelBuffer.Length);
             Array.Clear(locationDotsOutlinePixelBuffer, 0, locationDotsOutlinePixelBuffer.Length);
 
-            DFPosition playerPOS = TravelTimeCalculator.GetPlayerTravelPosition();
+            DFPosition playerPOS = previousPlayerPosition;
             DFPosition clickedPOS = EndPos;
             List<DFPosition> pixelsList = FindPixelsBetweenPlayerAndDest(clickedPOS);
 
@@ -626,7 +708,7 @@ namespace OverhauledOverworldTravel
         public List<DFPosition> FindPixelsBetweenPlayerAndDest(DFPosition endPos)
         {
             List<DFPosition> pixelsList = new List<DFPosition>();
-            DFPosition position = TravelTimeCalculator.GetPlayerTravelPosition();
+            DFPosition position = previousPlayerPosition;
             int playerXMapPixel = position.X;
             int playerYMapPixel = position.Y;
             int distanceXMapPixels = endPos.X - playerXMapPixel;
@@ -862,6 +944,12 @@ namespace OverhauledOverworldTravel
                 Debug.LogFormat("Offset value is outside bounds of pixelBuffer array, when added to width: offset = {0}", offset + (width * 4) + 4);
                 return;
             }
+
+            /*pixelBuffer[offset + (width * 4) + 2] = pathColor;
+            for (int i = 1; i < 4; i++) { pixelBuffer[offset + (width * 3) + i] = pathColor; }
+            for (int i = 0; i < 5; i++) { pixelBuffer[offset + (width * 2) + i] = pathColor; }
+            for (int i = 1; i < 4; i++) { pixelBuffer[offset + width + i] = pathColor; }
+            pixelBuffer[offset + 2] = pathColor;*/
 
             for (int i = 0; i < 5; i++) { pixelBuffer[offset + (width * 2) + i] = pathColor; }
             for (int i = 0; i < 5; i++) { pixelBuffer[offset + (width * i) + 2] = pathColor; }

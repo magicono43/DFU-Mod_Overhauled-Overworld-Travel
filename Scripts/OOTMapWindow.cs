@@ -106,6 +106,15 @@ namespace OverhauledOverworldTravel
 
         internal DaggerfallMessageBox infoBox;
 
+        protected Button stopTravelButton;
+        protected Rect stopTravelRect = new Rect(0, 0, 45, 11);
+
+        protected Button startFastTravelButton;
+        protected Rect startFastTravelRect = new Rect(0, 0, 45, 11);
+
+        Color32 textShadowColor = new Color32(0, 0, 0, 255);
+        Vector2 textShadowPosition = new Vector2(0.60f, 0.60f);
+
         protected Panel travelPathOverlayPanel;
         public Texture2D travelPathTexture;
         public Color32[] travelPathPixelBuffer;
@@ -122,7 +131,6 @@ namespace OverhauledOverworldTravel
         public static bool hasPlayerPositionChanged = false;
 
         int travelDelayTimer = 0;
-        int startFastTravelTimer = 0;
 
         // Gives index to use with terrainMovementModifiers[]. Indexed by terrain type, starting with Ocean at index 0.
         // Also used for getting climate-related indices for dungeon textures.
@@ -205,7 +213,35 @@ namespace OverhauledOverworldTravel
                     UpdateWaterButtons();
                 }*/
 
-                // Start adding some basic function buttons here next I work on this, I suppose.
+                // Stop Travel button
+                stopTravelButton = DaggerfallUI.AddButton(new Rect(273, 147, stopTravelRect.width, stopTravelRect.height), NativePanel);
+                stopTravelButton.BackgroundColor = new Color(1f, 1f, 1f, 1f); // For testing purposes
+                //stopTravelButton.BackgroundTexture = findButtonTexture;
+                stopTravelButton.OnMouseClick += StopTravelingButton_OnMouseClick;
+                stopTravelButton.Enabled = false;
+                TextLabel stopTravelText = DaggerfallUI.AddTextLabel(DaggerfallUI.DefaultFont, new Vector2(0, 0), string.Empty, stopTravelButton);
+                stopTravelText.HorizontalAlignment = HorizontalAlignment.Center;
+                stopTravelText.VerticalAlignment = VerticalAlignment.Bottom;
+                stopTravelText.ShadowColor = textShadowColor;
+                stopTravelText.ShadowPosition = textShadowPosition;
+                stopTravelText.TextScale = 1.45f;
+                stopTravelText.Text = "STOP";
+                stopTravelText.TextColor = new Color(0f, 0f, 0f, 1f);
+
+                // Start Fast Travel button
+                startFastTravelButton = DaggerfallUI.AddButton(new Rect(273, 160, startFastTravelRect.width, startFastTravelRect.height), NativePanel);
+                startFastTravelButton.BackgroundColor = new Color(1f, 1f, 1f, 1f); // For testing purposes
+                //startFastTravelButton.BackgroundTexture = findButtonTexture;
+                startFastTravelButton.OnMouseClick += StartFastTravelButton_OnMouseClick;
+                startFastTravelButton.Enabled = false;
+                TextLabel startFastTravelText = DaggerfallUI.AddTextLabel(DaggerfallUI.DefaultFont, new Vector2(0, 0), string.Empty, startFastTravelButton);
+                startFastTravelText.HorizontalAlignment = HorizontalAlignment.Center;
+                startFastTravelText.VerticalAlignment = VerticalAlignment.Bottom;
+                startFastTravelText.ShadowColor = textShadowColor;
+                startFastTravelText.ShadowPosition = textShadowPosition;
+                startFastTravelText.TextScale = 1.45f;
+                startFastTravelText.Text = "TRAVEL";
+                startFastTravelText.TextColor = new Color(0f, 0f, 0f, 1f);
 
                 locationDotsPixelBuffer = new Color32[(int)regionTextureOverlayPanelRect.width * (int)regionTextureOverlayPanelRect.height * 25];
                 locationDotsTexture = new Texture2D((int)regionTextureOverlayPanelRect.width * 5, (int)regionTextureOverlayPanelRect.height * 5, TextureFormat.ARGB32, false);
@@ -218,6 +254,49 @@ namespace OverhauledOverworldTravel
                 travelPathPixelBuffer = new Color32[(int)regionTextureOverlayPanelRect.width * (int)regionTextureOverlayPanelRect.height * 25];
                 travelPathTexture = new Texture2D((int)regionTextureOverlayPanelRect.width * 5, (int)regionTextureOverlayPanelRect.height * 5, TextureFormat.ARGB32, false);
                 travelPathTexture.filterMode = FilterMode.Point;
+            }
+        }
+
+        private void StopTravelingButton_OnMouseClick(BaseScreenComponent sender, Vector2 position)
+        {
+            // Stops travel on the map-screen and sets the destination as the last pixel the player was at on the map when it was clicked.
+            if (RegionSelected)
+            {
+                isPlayerTraveling = false;
+                travelDelayTimer = 0;
+
+                currentTravelLinePositionsList = new List<DFPosition>();
+                destinationPosition.Y = previousPlayerPosition.Y;
+                destinationPosition.X = previousPlayerPosition.X;
+                nextPlayerPosition.Y = previousPlayerPosition.Y;
+                nextPlayerPosition.X = previousPlayerPosition.X;
+
+                UpdatePlayerTravelDotsTexture();
+
+                DaggerfallUI.Instance.PlayOneShot(SoundClips.ButtonClick);
+            }
+        }
+
+        private void StartFastTravelButton_OnMouseClick(BaseScreenComponent sender, Vector2 position)
+        {
+            // Stops travel on the map-screen and performs the necessary actions to bring the player to that current pixel in the game-world, I.E. fast travels to it.
+            if (RegionSelected)
+            {
+                isPlayerTraveling = false;
+                travelDelayTimer = 0;
+
+                currentTravelLinePositionsList = new List<DFPosition>();
+                destinationPosition.Y = previousPlayerPosition.Y;
+                destinationPosition.X = previousPlayerPosition.X;
+                nextPlayerPosition.Y = previousPlayerPosition.Y;
+                nextPlayerPosition.X = previousPlayerPosition.X;
+
+                UpdatePlayerTravelDotsTexture();
+
+                DaggerfallUI.Instance.PlayOneShot(SoundClips.ButtonClick);
+
+                DaggerfallUI.Instance.FadeBehaviour.SmashHUDToBlack();
+                performFastTravel();
             }
         }
 
@@ -361,7 +440,6 @@ namespace OverhauledOverworldTravel
             {
                 isPlayerTraveling = false;
                 travelDelayTimer = 0;
-                startFastTravelTimer = 0;
             }
 
             if ((previousPlayerPosition.Y != destinationPosition.Y) || (previousPlayerPosition.X != destinationPosition.X))
@@ -376,7 +454,6 @@ namespace OverhauledOverworldTravel
             if (isPlayerTraveling)
             {
                 ++travelDelayTimer;
-                startFastTravelTimer = 0;
 
                 if (travelDelayTimer >= 25)
                 {
@@ -408,19 +485,6 @@ namespace OverhauledOverworldTravel
                     }
 
                     UpdatePlayerTravelDotsTexture();
-                }
-            }
-            else // Will eventually want a button of some kind to perform this, but for now just a delay when standing in the same spot for long enough on the map, for testing.
-            {
-                ++startFastTravelTimer;
-
-                if (startFastTravelTimer >= 800)
-                {
-                    travelDelayTimer = 0;
-                    startFastTravelTimer = 0;
-
-                    DaggerfallUI.Instance.FadeBehaviour.SmashHUDToBlack();
-                    performFastTravel();
                 }
             }
         }
@@ -493,6 +557,10 @@ namespace OverhauledOverworldTravel
 
                 // Ensure clicks are inside region texture
                 if (position.x < 0 || position.x > regionTextureOverlayPanelRect.width || position.y < 0 || position.y > regionTextureOverlayPanelRect.height)
+                    return;
+
+                // Ignore clicks that are within the screen-space that these buttons occupy while a region is selected. Needed to use "sender.MousePosition" due to the "position" being post-scaling value.
+                if (stopTravelButton.Rectangle.Contains(sender.MousePosition) || startFastTravelButton.Rectangle.Contains(sender.MousePosition))
                     return;
 
                 EndPos = GetClickMPCoords();
@@ -1002,6 +1070,8 @@ namespace OverhauledOverworldTravel
             base.OpenRegionPanel(region);
 
             travelPathOverlayPanel.Enabled = true;
+            stopTravelButton.Enabled = true;
+            startFastTravelButton.Enabled = true;
         }
 
         protected override void CloseRegionPanel()
@@ -1009,6 +1079,8 @@ namespace OverhauledOverworldTravel
             base.CloseRegionPanel();
 
             travelPathOverlayPanel.Enabled = false;
+            stopTravelButton.Enabled = false;
+            startFastTravelButton.Enabled = false;
         }
 
         public void DrawMapSection(int originX, int originY, int width, int height, ref Color32[] pixelBuffer, bool circular = false)

@@ -106,6 +106,16 @@ namespace OverhauledOverworldTravel
 
         internal DaggerfallMessageBox infoBox;
 
+        WorldTime worldTimer;
+        DaggerfallDateTime dateTime;
+        string clockDisplayString = "";
+        ulong initialDateTimeInSeconds = 0;
+        ulong dateTimeInSeconds = 0;
+        public static bool mapTimeHasChanged = false;
+        protected Button mapClockButton;
+        protected Rect mapClockRect = new Rect(0, 0, 90, 11);
+        protected TextLabel mapClockText;
+
         protected Button stopTravelButton;
         protected Rect stopTravelRect = new Rect(0, 0, 45, 11);
 
@@ -213,6 +223,21 @@ namespace OverhauledOverworldTravel
                     UpdateWaterButtons();
                 }*/
 
+                // Map Clock Display
+                mapClockButton = DaggerfallUI.AddButton(new Rect(120, 12, mapClockRect.width, mapClockRect.height), NativePanel);
+                mapClockButton.BackgroundColor = new Color(1f, 1f, 1f, 1f); // For testing purposes
+                //mapClockButton.BackgroundTexture = findButtonTexture;
+                mapClockButton.OnMouseClick += ClockDisplayButton_OnMouseClick;
+                mapClockButton.Enabled = false;
+                mapClockText = DaggerfallUI.AddTextLabel(DaggerfallUI.DefaultFont, new Vector2(0, 0), string.Empty, mapClockButton);
+                mapClockText.HorizontalAlignment = HorizontalAlignment.Center;
+                mapClockText.VerticalAlignment = VerticalAlignment.Bottom;
+                mapClockText.ShadowColor = textShadowColor;
+                mapClockText.ShadowPosition = textShadowPosition;
+                mapClockText.TextScale = 1.15f;
+                mapClockText.Text = clockDisplayString;
+                mapClockText.TextColor = new Color(0f, 0f, 0f, 1f);
+
                 // Stop Travel button
                 stopTravelButton = DaggerfallUI.AddButton(new Rect(273, 147, stopTravelRect.width, stopTravelRect.height), NativePanel);
                 stopTravelButton.BackgroundColor = new Color(1f, 1f, 1f, 1f); // For testing purposes
@@ -254,6 +279,15 @@ namespace OverhauledOverworldTravel
                 travelPathPixelBuffer = new Color32[(int)regionTextureOverlayPanelRect.width * (int)regionTextureOverlayPanelRect.height * 25];
                 travelPathTexture = new Texture2D((int)regionTextureOverlayPanelRect.width * 5, (int)regionTextureOverlayPanelRect.height * 5, TextureFormat.ARGB32, false);
                 travelPathTexture.filterMode = FilterMode.Point;
+            }
+        }
+
+        private void ClockDisplayButton_OnMouseClick(BaseScreenComponent sender, Vector2 position)
+        {
+            // Does nothing for now but make a click sound, maybe later it can change the time display setting or something?
+            if (RegionSelected)
+            {
+                DaggerfallUI.Instance.PlayOneShot(SoundClips.ButtonClick);
             }
         }
 
@@ -430,63 +464,144 @@ namespace OverhauledOverworldTravel
             currentTravelLinePositionsList = new List<DFPosition>();
             isPlayerTraveling = false;
             hasPlayerPositionChanged = false;
+            mapTimeHasChanged = false;
+
+            worldTimer = GameObject.Find("DaggerfallUnity").GetComponent<WorldTime>();
+            dateTime = worldTimer.DaggerfallDateTime.Clone();
+            initialDateTimeInSeconds = dateTime.ToSeconds();
+            dateTimeInSeconds = dateTime.ToSeconds();
+            clockDisplayString = GetTimeMode(dateTime.Hour, dateTime.Minute) + " , " + dateTime.DayName + " the " + (dateTime.Day + 1) + GetSuffix(dateTime.Day + 1);
+        }
+
+        public override void OnPop()
+        {
+            base.OnPop();
+
+            isPlayerTraveling = false;
+            hasPlayerPositionChanged = false;
+            mapTimeHasChanged = false;
+
+            initialDateTimeInSeconds = 0;
+            dateTimeInSeconds = 0;
+            clockDisplayString = "";
         }
 
         public override void Update()
         {
             base.Update();
 
-            if (!RegionSelected)
+            if (RegionSelected)
             {
-                isPlayerTraveling = false;
-                travelDelayTimer = 0;
-            }
+                if (mapTimeHasChanged)
+                {
+                    dateTime.FromSeconds(dateTimeInSeconds);
+                    clockDisplayString = GetTimeMode(dateTime.Hour, dateTime.Minute) + " , " + dateTime.DayName + " the " + (dateTime.Day + 1) + GetSuffix(dateTime.Day + 1);
+                    mapClockText.Text = clockDisplayString;
+                    mapTimeHasChanged = false;
+                }
 
-            if ((previousPlayerPosition.Y != destinationPosition.Y) || (previousPlayerPosition.X != destinationPosition.X))
-            {
-                isPlayerTraveling = true;
+                if ((previousPlayerPosition.Y != destinationPosition.Y) || (previousPlayerPosition.X != destinationPosition.X))
+                {
+                    isPlayerTraveling = true;
+                }
+                else
+                {
+                    isPlayerTraveling = false;
+                }
+
+                if (isPlayerTraveling)
+                {
+                    ++travelDelayTimer;
+                    dateTimeInSeconds += 25;
+                    mapTimeHasChanged = true;
+
+                    if (travelDelayTimer >= 25)
+                    {
+                        travelDelayTimer = 0;
+
+                        /*DFPosition worldPos = MapsFile.MapPixelToWorldCoord(nextPlayerPosition.X, nextPlayerPosition.Y);
+                        playerGPS.WorldX = worldPos.X;
+                        playerGPS.WorldZ = worldPos.Y;
+                        playerGPS.UpdateWorldInfo();*/
+
+                        previousPlayerPosition.Y = nextPlayerPosition.Y;
+                        previousPlayerPosition.X = nextPlayerPosition.X;
+                        if (currentTravelLinePositionsList.Count > 0)
+                        {
+                            currentTravelLinePositionsList.RemoveAt(0);
+
+                            if (currentTravelLinePositionsList.Count > 0)
+                            {
+                                nextPlayerPosition.Y = currentTravelLinePositionsList[0].Y;
+                                nextPlayerPosition.X = currentTravelLinePositionsList[0].X;
+                            }
+                            else
+                            {
+                                nextPlayerPosition.Y = destinationPosition.Y;
+                                nextPlayerPosition.X = destinationPosition.X;
+                                previousPlayerPosition.Y = nextPlayerPosition.Y;
+                                previousPlayerPosition.X = nextPlayerPosition.X;
+                            }
+                        }
+
+                        UpdatePlayerTravelDotsTexture();
+                    }
+                }
             }
             else
             {
                 isPlayerTraveling = false;
+                travelDelayTimer = 0;
             }
+        }
 
-            if (isPlayerTraveling)
+        private string GetSuffix(int day)
+        {
+            string suffix = "th";
+            if (day == 1 || day == 21)
+                suffix = "st";
+            else if (day == 2 || day == 22)
+                suffix = "nd";
+            else if (day == 3 || day == 33)
+                suffix = "rd";
+
+            return suffix;
+        }
+
+        private string GetTimeMode(int hours, int minute)
+        {
+            string result;
+
+            if (true) // useTwelveHourClock
             {
-                ++travelDelayTimer;
-
-                if (travelDelayTimer >= 25)
+                if (hours == 0)
                 {
-                    travelDelayTimer = 0;
-
-                    /*DFPosition worldPos = MapsFile.MapPixelToWorldCoord(nextPlayerPosition.X, nextPlayerPosition.Y);
-                    playerGPS.WorldX = worldPos.X;
-                    playerGPS.WorldZ = worldPos.Y;
-                    playerGPS.UpdateWorldInfo();*/
-
-                    previousPlayerPosition.Y = nextPlayerPosition.Y;
-                    previousPlayerPosition.X = nextPlayerPosition.X;
-                    if (currentTravelLinePositionsList.Count > 0)
-                    {
-                        currentTravelLinePositionsList.RemoveAt(0);
-
-                        if (currentTravelLinePositionsList.Count > 0)
-                        {
-                            nextPlayerPosition.Y = currentTravelLinePositionsList[0].Y;
-                            nextPlayerPosition.X = currentTravelLinePositionsList[0].X;
-                        }
-                        else
-                        {
-                            nextPlayerPosition.Y = destinationPosition.Y;
-                            nextPlayerPosition.X = destinationPosition.X;
-                            previousPlayerPosition.Y = nextPlayerPosition.Y;
-                            previousPlayerPosition.X = nextPlayerPosition.X;
-                        }
-                    }
-
-                    UpdatePlayerTravelDotsTexture();
+                    result = "12";
                 }
+                else if (hours >= 13)
+                    result = "" + (hours - 12);
+                else
+                    result = "" + hours;
             }
+            else
+            {
+                //result = "" + hours;
+            }
+
+            if (minute < 10)
+                result += ":0" + minute;
+            else
+                result += ":" + minute;
+
+            if (true) // useTwelveHourClock
+            {
+                if (hours >= 12)
+                    result += " PM";
+                else
+                    result += " AM";
+            }
+
+            return result;
         }
 
         // perform fast travel actions
@@ -505,7 +620,7 @@ namespace OverhauledOverworldTravel
             if (!GameManager.Instance.PlayerEntity.Career.NoRegenSpellPoints)
                 GameManager.Instance.PlayerEntity.CurrentMagicka = GameManager.Instance.PlayerEntity.MaxMagicka;
 
-            //DaggerfallUnity.WorldTime.DaggerfallDateTime.RaiseTime(travelTimeTotalMins * 60);
+            DaggerfallUnity.WorldTime.DaggerfallDateTime.RaiseTime(dateTimeInSeconds - initialDateTimeInSeconds);
 
             // Halt random enemy spawns for next playerEntity update so player isn't bombarded by spawned enemies at the end of a long trip
             GameManager.Instance.PlayerEntity.PreventEnemySpawns = true;
@@ -560,7 +675,7 @@ namespace OverhauledOverworldTravel
                     return;
 
                 // Ignore clicks that are within the screen-space that these buttons occupy while a region is selected. Needed to use "sender.MousePosition" due to the "position" being post-scaling value.
-                if (stopTravelButton.Rectangle.Contains(sender.MousePosition) || startFastTravelButton.Rectangle.Contains(sender.MousePosition))
+                if (stopTravelButton.Rectangle.Contains(sender.MousePosition) || startFastTravelButton.Rectangle.Contains(sender.MousePosition) || mapClockButton.Rectangle.Contains(sender.MousePosition))
                     return;
 
                 EndPos = GetClickMPCoords();
@@ -571,6 +686,8 @@ namespace OverhauledOverworldTravel
                 {
                     nextPlayerPosition.Y = currentTravelLinePositionsList[0].Y;
                     nextPlayerPosition.X = currentTravelLinePositionsList[0].X;
+                    dateTimeInSeconds += 25;
+                    mapTimeHasChanged = true;
                 }
 
                 UpdatePlayerTravelDotsTexture();
@@ -1070,8 +1187,11 @@ namespace OverhauledOverworldTravel
             base.OpenRegionPanel(region);
 
             travelPathOverlayPanel.Enabled = true;
+            mapClockButton.Enabled = true;
             stopTravelButton.Enabled = true;
             startFastTravelButton.Enabled = true;
+
+            mapClockText.Text = clockDisplayString;
         }
 
         protected override void CloseRegionPanel()
@@ -1079,6 +1199,7 @@ namespace OverhauledOverworldTravel
             base.CloseRegionPanel();
 
             travelPathOverlayPanel.Enabled = false;
+            mapClockButton.Enabled = false;
             stopTravelButton.Enabled = false;
             startFastTravelButton.Enabled = false;
         }

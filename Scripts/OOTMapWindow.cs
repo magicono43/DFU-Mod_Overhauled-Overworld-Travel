@@ -136,9 +136,10 @@ namespace OverhauledOverworldTravel
         public static DFPosition destinationPosition = TravelTimeCalculator.GetPlayerTravelPosition();
 
         public static List<DFPosition> currentTravelLinePositionsList = new List<DFPosition>();
+        public static List<DFPosition> followingTravelLinePositionsList = new List<DFPosition>();
 
         public static bool isPlayerTraveling = false;
-        public static bool hasPlayerPositionChanged = false;
+        public static bool playerPosAlreadyConverted = false;
 
         int travelDelayTimer = 0;
 
@@ -300,6 +301,7 @@ namespace OverhauledOverworldTravel
                 travelDelayTimer = 0;
 
                 currentTravelLinePositionsList = new List<DFPosition>();
+                followingTravelLinePositionsList = new List<DFPosition>();
                 destinationPosition.Y = previousPlayerPosition.Y;
                 destinationPosition.X = previousPlayerPosition.X;
                 nextPlayerPosition.Y = previousPlayerPosition.Y;
@@ -320,6 +322,7 @@ namespace OverhauledOverworldTravel
                 travelDelayTimer = 0;
 
                 currentTravelLinePositionsList = new List<DFPosition>();
+                followingTravelLinePositionsList = new List<DFPosition>();
                 destinationPosition.Y = previousPlayerPosition.Y;
                 destinationPosition.X = previousPlayerPosition.X;
                 nextPlayerPosition.Y = previousPlayerPosition.Y;
@@ -462,8 +465,9 @@ namespace OverhauledOverworldTravel
             nextPlayerPosition = TravelTimeCalculator.GetPlayerTravelPosition();
             destinationPosition = TravelTimeCalculator.GetPlayerTravelPosition();
             currentTravelLinePositionsList = new List<DFPosition>();
+            followingTravelLinePositionsList = new List<DFPosition>();
             isPlayerTraveling = false;
-            hasPlayerPositionChanged = false;
+            playerPosAlreadyConverted = false;
             mapTimeHasChanged = false;
 
             worldTimer = GameObject.Find("DaggerfallUnity").GetComponent<WorldTime>();
@@ -478,7 +482,7 @@ namespace OverhauledOverworldTravel
             base.OnPop();
 
             isPlayerTraveling = false;
-            hasPlayerPositionChanged = false;
+            playerPosAlreadyConverted = false;
             mapTimeHasChanged = false;
 
             initialDateTimeInSeconds = 0;
@@ -507,15 +511,16 @@ namespace OverhauledOverworldTravel
                 else
                 {
                     isPlayerTraveling = false;
+                    followingTravelLinePositionsList = new List<DFPosition>();
                 }
 
                 if (isPlayerTraveling)
                 {
                     ++travelDelayTimer;
-                    dateTimeInSeconds += 25;
+                    dateTimeInSeconds += 50;
                     mapTimeHasChanged = true;
 
-                    if (travelDelayTimer >= 25)
+                    if (travelDelayTimer >= 2)
                     {
                         travelDelayTimer = 0;
 
@@ -528,6 +533,7 @@ namespace OverhauledOverworldTravel
                         previousPlayerPosition.X = nextPlayerPosition.X;
                         if (currentTravelLinePositionsList.Count > 0)
                         {
+                            followingTravelLinePositionsList.Add(currentTravelLinePositionsList[0]);
                             currentTravelLinePositionsList.RemoveAt(0);
 
                             if (currentTravelLinePositionsList.Count > 0)
@@ -555,113 +561,6 @@ namespace OverhauledOverworldTravel
             }
         }
 
-        private string GetSuffix(int day)
-        {
-            string suffix = "th";
-            if (day == 1 || day == 21)
-                suffix = "st";
-            else if (day == 2 || day == 22)
-                suffix = "nd";
-            else if (day == 3 || day == 33)
-                suffix = "rd";
-
-            return suffix;
-        }
-
-        private string GetTimeMode(int hours, int minute)
-        {
-            string result;
-
-            if (true) // useTwelveHourClock
-            {
-                if (hours == 0)
-                {
-                    result = "12";
-                }
-                else if (hours >= 13)
-                    result = "" + (hours - 12);
-                else
-                    result = "" + hours;
-            }
-            else
-            {
-                //result = "" + hours;
-            }
-
-            if (minute < 10)
-                result += ":0" + minute;
-            else
-                result += ":" + minute;
-
-            if (true) // useTwelveHourClock
-            {
-                if (hours >= 12)
-                    result += " PM";
-                else
-                    result += " AM";
-            }
-
-            return result;
-        }
-
-        // perform fast travel actions
-        private void performFastTravel()
-        {
-            //RaiseOnPreFastTravelEvent(); // So for these events, I'm not sure how or if you can "piggy-back" off the existing ones from another class/window, really not sure how that might be done, so for now whatever.
-
-            // Cache scene first, if fast travelling while on ship.
-            if (GameManager.Instance.TransportManager.IsOnShip())
-                DaggerfallWorkshop.Game.Serialization.SaveLoadManager.CacheScene(GameManager.Instance.StreamingWorld.SceneName);
-            GameManager.Instance.StreamingWorld.RestoreWorldCompensationHeight(0);
-            GameManager.Instance.StreamingWorld.TeleportToCoordinates((int)endPos.X, (int)endPos.Y, StreamingWorld.RepositionMethods.DirectionFromStartMarker);
-
-            GameManager.Instance.PlayerEntity.CurrentHealth = GameManager.Instance.PlayerEntity.MaxHealth;
-            GameManager.Instance.PlayerEntity.CurrentFatigue = GameManager.Instance.PlayerEntity.MaxFatigue;
-            if (!GameManager.Instance.PlayerEntity.Career.NoRegenSpellPoints)
-                GameManager.Instance.PlayerEntity.CurrentMagicka = GameManager.Instance.PlayerEntity.MaxMagicka;
-
-            DaggerfallUnity.WorldTime.DaggerfallDateTime.RaiseTime(dateTimeInSeconds - initialDateTimeInSeconds);
-
-            // Halt random enemy spawns for next playerEntity update so player isn't bombarded by spawned enemies at the end of a long trip
-            GameManager.Instance.PlayerEntity.PreventEnemySpawns = true;
-
-            // Vampires and characters with Damage from Sunlight disadvantage never arrive between 6am and 6pm regardless of travel type
-            // Otherwise raise arrival time to just after 7am if cautious travel would arrive at night
-            /*if (GameManager.Instance.PlayerEffectManager.HasVampirism() || GameManager.Instance.PlayerEntity.Career.DamageFromSunlight)
-            {
-                if (DaggerfallUnity.Instance.WorldTime.DaggerfallDateTime.IsDay)
-                {
-                    DaggerfallUnity.Instance.WorldTime.DaggerfallDateTime.RaiseTime(
-                        (DaggerfallDateTime.DuskHour - DaggerfallUnity.Instance.WorldTime.DaggerfallDateTime.Hour) * 3600);
-                }
-            }*/
-            /*if (speedCautious)
-            {
-                if ((DaggerfallUnity.WorldTime.DaggerfallDateTime.Hour < 7)
-                    || ((DaggerfallUnity.WorldTime.DaggerfallDateTime.Hour == 7) && (DaggerfallUnity.WorldTime.DaggerfallDateTime.Minute < 10)))
-                {
-                    float raiseTime = (((7 - DaggerfallUnity.WorldTime.DaggerfallDateTime.Hour) * 3600)
-                                        + ((10 - DaggerfallUnity.WorldTime.DaggerfallDateTime.Minute) * 60)
-                                        - DaggerfallUnity.WorldTime.DaggerfallDateTime.Second);
-                    DaggerfallUnity.WorldTime.DaggerfallDateTime.RaiseTime(raiseTime);
-                }
-                else if (DaggerfallUnity.WorldTime.DaggerfallDateTime.Hour > 17)
-                {
-                    float raiseTime = (((31 - DaggerfallUnity.WorldTime.DaggerfallDateTime.Hour) * 3600)
-                    + ((10 - DaggerfallUnity.WorldTime.DaggerfallDateTime.Minute) * 60)
-                    - DaggerfallUnity.WorldTime.DaggerfallDateTime.Second);
-                    DaggerfallUnity.WorldTime.DaggerfallDateTime.RaiseTime(raiseTime);
-                }
-            }*/
-
-            DaggerfallUI.Instance.UserInterfaceManager.PopWindow();
-            this.CloseTravelWindows(true);
-            GameManager.Instance.PlayerEntity.RaiseSkills();
-            DaggerfallUI.Instance.FadeBehaviour.FadeHUDFromBlack();
-
-            //RaiseOnPostFastTravelEvent();
-        }
-
         // Handle clicks on the main panel
         protected override void ClickHandler(BaseScreenComponent sender, Vector2 position)
         {
@@ -680,8 +579,8 @@ namespace OverhauledOverworldTravel
 
                 EndPos = GetClickMPCoords();
 
-                destinationPosition = EndPos;
-                currentTravelLinePositionsList = FindPixelsBetweenPlayerAndDest(destinationPosition);
+                destinationPosition = ConvertDFPosToExactPixelPos(EndPos);
+                currentTravelLinePositionsList = FindPixelsBetweenPlayerAndDest();
                 if (currentTravelLinePositionsList.Count > 0)
                 {
                     nextPlayerPosition.Y = currentTravelLinePositionsList[0].Y;
@@ -726,32 +625,6 @@ namespace OverhauledOverworldTravel
             }
         }
 
-        protected DFPosition GetClickMPCoords()
-        {
-            float scale = GetRegionMapScale(selectedRegion);
-            Vector2 coordinates = GetCoordinates();
-            int x = (int)(coordinates.x / scale);
-            int y = (int)(coordinates.y / scale);
-
-            if (selectedRegion == betonyIndex)      // Manually correct Betony offset
-            {
-                x += 60;
-                y += 212;
-            }
-
-            if (selectedRegion == 61)               // Fix for Cybiades zoom-in map. Map is more zoomed in than for other regions but the pixel coordinates are not scaled to match.
-            {
-                int xDiff = x - 440;
-                int yDiff = y - 340;
-                xDiff /= 4;
-                yDiff /= 4;
-                x = 440 + xDiff;
-                y = 340 + yDiff;
-            }
-
-            return new DFPosition(x, y);
-        }
-
         // Updates location dots
         protected override void UpdateMapLocationDotsTexture()
         {
@@ -770,6 +643,17 @@ namespace OverhauledOverworldTravel
 
         protected virtual void UpdatePlayerTravelDotsTexture()
         {
+            DFPosition playerWorldPos = TravelTimeCalculator.GetPlayerTravelPosition();
+            if (previousPlayerPosition.Y == playerWorldPos.Y && previousPlayerPosition.X == playerWorldPos.X)
+            {
+                previousPlayerPosition = ConvertDFPosToExactPixelPos(previousPlayerPosition);
+                nextPlayerPosition.Y = previousPlayerPosition.Y;
+                nextPlayerPosition.X = previousPlayerPosition.X;
+                destinationPosition.Y = previousPlayerPosition.Y;
+                destinationPosition.X = previousPlayerPosition.X;
+                playerPosAlreadyConverted = true;
+            }
+
             // Get map and dimensions
             string mapName = selectedRegionMapNames[mapIndex];
             Vector2 origin = offsetLookup[mapName];
@@ -777,44 +661,43 @@ namespace OverhauledOverworldTravel
             int originY = (int)origin.y;
             int width = (int)regionTextureOverlayPanelRect.width;
             int height = (int)regionTextureOverlayPanelRect.height;
-
-            // Plot locations to color array
             scale = GetRegionMapScale(selectedRegion);
             Array.Clear(travelPathPixelBuffer, 0, travelPathPixelBuffer.Length);
 
             int widthMulti5 = width * 5;
-            int offsetMulti5 = 0;
 
+            /*int dottedLineCounter = 0;
             foreach (DFPosition pixelPos in currentTravelLinePositionsList)
             {
-                offsetMulti5 = (int)((((height - (pixelPos.Y - originY) - 1) * 5 * widthMulti5) + ((pixelPos.X - originX) * 5)) * scale);
-                DrawPathLine(offsetMulti5, widthMulti5, blueColor, ref travelPathPixelBuffer);
-            }
-
-            // Draw larger "Player Position Crosshair" where the player is meant to currently be
-            offsetMulti5 = (int)((((height - (previousPlayerPosition.Y - originY) - 1) * 5 * widthMulti5) + ((previousPlayerPosition.X - originX) * 5)) * scale);
-            DrawPlayerPosition(offsetMulti5, widthMulti5, whiteColor, ref travelPathPixelBuffer);
+                dottedLineCounter++;
+                if (dottedLineCounter % 4 == 0)
+                {
+                    DrawPathLine(pixelPos, widthMulti5, blueColor, ref travelPathPixelBuffer);
+                }
+            }*/
 
             if ((previousPlayerPosition.Y != destinationPosition.Y) || (previousPlayerPosition.X != destinationPosition.X))
             {
-                // Draw Classic Fallout system "Destination Crosshair" 15x15 sprite-sheet drawn method, where the player last clicked
-                for (int i = 0; i < 9; i++)
+                int dottedLineCounter = 0;
+                foreach (DFPosition pixelPos in followingTravelLinePositionsList)
                 {
-                    if (i >= 0 && i <= 2) // Top Row
+                    dottedLineCounter++;
+                    if (dottedLineCounter >= 0 && dottedLineCounter <= 4)
                     {
-                        offsetMulti5 = (int)((((height - ((destinationPosition.Y - 1) - originY) - 1) * 5 * widthMulti5) + (((destinationPosition.X + (i - 1)) - originX) * 5)) * scale);
+                        DrawPathLine(pixelPos, widthMulti5, blueColor, ref travelPathPixelBuffer);
                     }
-                    else if (i >= 3 && i <= 5) // Middle Row
+                    else if (dottedLineCounter >= 12)
                     {
-                        offsetMulti5 = (int)((((height - (destinationPosition.Y - originY) - 1) * 5 * widthMulti5) + (((destinationPosition.X + (i - 4)) - originX) * 5)) * scale);
+                        dottedLineCounter = 0;
                     }
-                    else // Bottom Row
-                    {
-                        offsetMulti5 = (int)((((height - ((destinationPosition.Y + 1) - originY) - 1) * 5 * widthMulti5) + (((destinationPosition.X + (i - 7)) - originX) * 5)) * scale);
-                    }
-                    DrawDestinationCrosshair(offsetMulti5, widthMulti5, redColor, ref travelPathPixelBuffer, i);
                 }
+
+                // Draw Classic Fallout system "Destination Crosshair" 15x15, where the player last clicked
+                DrawDestinationCrosshair(destinationPosition, widthMulti5, redColor, ref travelPathPixelBuffer);
             }
+
+            // Draw "Player Position Crosshair" where the player is meant to currently be
+            DrawPlayerPosition(previousPlayerPosition, widthMulti5, whiteColor, ref travelPathPixelBuffer);
 
             // Apply updated color array to texture
             travelPathTexture.SetPixels32(travelPathPixelBuffer);
@@ -838,10 +721,6 @@ namespace OverhauledOverworldTravel
             scale = GetRegionMapScale(selectedRegion);
             Array.Clear(locationDotsPixelBuffer, 0, locationDotsPixelBuffer.Length);
             Array.Clear(locationDotsOutlinePixelBuffer, 0, locationDotsOutlinePixelBuffer.Length);
-
-            DFPosition playerPOS = previousPlayerPosition;
-            DFPosition clickedPOS = EndPos;
-            List<DFPosition> pixelsList = FindPixelsBetweenPlayerAndDest(clickedPOS);
 
             for (int y = 0; y < height; y++)
             {
@@ -890,9 +769,85 @@ namespace OverhauledOverworldTravel
             regionLocationDotsOverlayPanel.BackgroundTexture = locationDotsTexture;
         }
 
-        public List<DFPosition> FindPixelsBetweenPlayerAndDest(DFPosition endPos)
+        public List<DFPosition> FindPixelsBetweenPlayerAndDest()
         {
+            // Get map and dimensions
+            string mapName = selectedRegionMapNames[mapIndex];
+            Vector2 origin = offsetLookup[mapName];
+            int originX = (int)origin.x;
+            int originY = (int)origin.y;
+            int width = (int)regionTextureOverlayPanelRect.width;
+            int height = (int)regionTextureOverlayPanelRect.height;
+            scale = GetRegionMapScale(selectedRegion);
+
+            int widthMulti5 = width * 5;
+
+            // Find middle pixel of DFPosition's map-pixel's 5x5 pixel grid
+            int playerPosExactMiddlePixelBufferIndex = (previousPlayerPosition.Y * widthMulti5) + previousPlayerPosition.X;
+            int destinationPosExactMiddlePixelBufferIndex = (int)((((height - (endPos.Y - originY) - 1) * 5 * widthMulti5) + ((endPos.X - originX) * 5)) * scale) + (widthMulti5 * 2) + 2;
+
+            // Convert above pixel buffer index values to vectors with x and y properties
+            int playerXMapPixel = (int)playerPosExactMiddlePixelBufferIndex % widthMulti5;
+            int playerYMapPixel = Mathf.FloorToInt(playerPosExactMiddlePixelBufferIndex / widthMulti5);
+            int endPosXMapPixel = (int)destinationPosExactMiddlePixelBufferIndex % widthMulti5;
+            int endPosYMapPixel = Mathf.FloorToInt(destinationPosExactMiddlePixelBufferIndex / widthMulti5);
+
+            // Do rest of distance calculation and populating list with pixel values in-between playerPos and destinationPos
             List<DFPosition> pixelsList = new List<DFPosition>();
+            int distanceXMapPixels = endPosXMapPixel - playerXMapPixel;
+            int distanceYMapPixels = endPosYMapPixel - playerYMapPixel;
+            int distanceXMapPixelsAbs = Mathf.Abs(distanceXMapPixels);
+            int distanceYMapPixelsAbs = Mathf.Abs(distanceYMapPixels);
+            int furthestOfXandYDistance = 0;
+
+            if (distanceXMapPixelsAbs <= distanceYMapPixelsAbs)
+                furthestOfXandYDistance = distanceYMapPixelsAbs;
+            else
+                furthestOfXandYDistance = distanceXMapPixelsAbs;
+
+            int xPixelMovementDirection = (distanceXMapPixels >= 0) ? 1 : -1;
+            int yPixelMovementDirection = (distanceYMapPixels >= 0) ? 1 : -1;
+
+            int numberOfMovements = 0;
+            int shorterOfXandYDistanceIncrementer = 0;
+
+            while (numberOfMovements < furthestOfXandYDistance)
+            {
+                DFPosition pixelPos = new DFPosition();
+
+                if (furthestOfXandYDistance == distanceXMapPixelsAbs)
+                {
+                    playerXMapPixel += xPixelMovementDirection;
+                    shorterOfXandYDistanceIncrementer += distanceYMapPixelsAbs;
+
+                    if (shorterOfXandYDistanceIncrementer > distanceXMapPixelsAbs)
+                    {
+                        shorterOfXandYDistanceIncrementer -= distanceXMapPixelsAbs;
+                        playerYMapPixel += yPixelMovementDirection;
+                    }
+                }
+                else
+                {
+                    playerYMapPixel += yPixelMovementDirection;
+                    shorterOfXandYDistanceIncrementer += distanceXMapPixelsAbs;
+
+                    if (shorterOfXandYDistanceIncrementer > distanceYMapPixelsAbs)
+                    {
+                        shorterOfXandYDistanceIncrementer -= distanceYMapPixelsAbs;
+                        playerXMapPixel += xPixelMovementDirection;
+                    }
+                }
+
+                pixelPos.Y = playerYMapPixel;
+                pixelPos.X = playerXMapPixel;
+
+                pixelsList.Add(pixelPos);
+
+                ++numberOfMovements;
+            }
+
+            // Below is the original method for finding the distances between daggerfall map locations. I'll need to work with this probably eventually with the more "exact" positional coorindates I'm using.
+            /*List<DFPosition> pixelsList = new List<DFPosition>();
             DFPosition position = previousPlayerPosition;
             int playerXMapPixel = position.X;
             int playerYMapPixel = position.Y;
@@ -955,9 +910,81 @@ namespace OverhauledOverworldTravel
                 pixelsList.Add(pixelPos);
 
                 ++numberOfMovements;
-            }
+            }*/
 
             return pixelsList;
+        }
+
+        public static void DrawPlayerPosition(DFPosition pixelPos, int width, Color32 pathColor, ref Color32[] pixelBuffer)
+        {
+            int offset = (pixelPos.Y * width) + pixelPos.X;
+
+            for (int i = -1; i < 2; i++) { pixelBuffer[offset + (width * 4) + i] = pathColor; }
+            for (int i = -1; i < 2; i++) { pixelBuffer[offset - (width * 4) + i] = pathColor; }
+            for (int i = -1; i < 2; i++) { pixelBuffer[offset + (width * 3) + i] = pathColor; }
+            for (int i = -1; i < 2; i++) { pixelBuffer[offset - (width * 3) + i] = pathColor; }
+            for (int i = -1; i < 2; i++) { pixelBuffer[offset + (width * 2) + i] = pathColor; }
+            for (int i = -1; i < 2; i++) { pixelBuffer[offset - (width * 2) + i] = pathColor; }
+
+            for (int i = -4; i < 5; i++) { pixelBuffer[offset + width + i] = pathColor; }
+            for (int i = -4; i < 5; i++) { pixelBuffer[offset - width + i] = pathColor; }
+            for (int i = -4; i < 5; i++) { pixelBuffer[offset + i] = pathColor; }
+
+            //for (int i = -2; i < 3; i++) { pixelBuffer[offset + (width * i)] = pathColor; }
+            //for (int i = -2; i < 3; i++) { pixelBuffer[offset + i] = pathColor; }
+        }
+
+        public static void DrawPathLine(DFPosition pixelPos, int width, Color32 pathColor, ref Color32[] pixelBuffer)
+        {
+            int offset = (pixelPos.Y * width) + pixelPos.X;
+
+            for (int i = -1; i < 2; i++) { pixelBuffer[offset + width + i] = pathColor; }
+            for (int i = -1; i < 2; i++) { pixelBuffer[offset + i] = pathColor; }
+            //for (int i = -1; i < 2; i++) { pixelBuffer[offset - width + i] = pathColor; }
+        }
+
+        public static void DrawDestinationCrosshair(DFPosition pixelPos, int width, Color32 pathColor, ref Color32[] pixelBuffer)
+        {
+            int offset = (pixelPos.Y * width) + pixelPos.X;
+
+            for (int i = -4; i < 5; i++) { pixelBuffer[offset + (width * 7) + i] = pathColor; }
+            for (int i = -4; i < 5; i++) { pixelBuffer[offset - (width * 7) + i] = pathColor; }
+
+            for (int i = -3; i < 4; i++) { pixelBuffer[offset + (width * 6) + i] = pathColor; }
+            for (int i = -3; i < 4; i++) { pixelBuffer[offset - (width * 6) + i] = pathColor; }
+
+            for (int i = -2; i < 3; i++) { pixelBuffer[offset + (width * 5) + i] = pathColor; }
+            for (int i = -2; i < 3; i++) { pixelBuffer[offset - (width * 5) + i] = pathColor; }
+
+            pixelBuffer[offset + (width * 4) + -7] = pathColor;
+            for (int i = -1; i < 2; i++) { pixelBuffer[offset + (width * 4) + i] = pathColor; }
+            pixelBuffer[offset + (width * 4) + 7] = pathColor;
+            pixelBuffer[offset - (width * 4) + -7] = pathColor;
+            for (int i = -1; i < 2; i++) { pixelBuffer[offset - (width * 4) + i] = pathColor; }
+            pixelBuffer[offset - (width * 4) + 7] = pathColor;
+
+            for (int i = -7; i < -5; i++) { pixelBuffer[offset + (width * 3) + i] = pathColor; }
+            pixelBuffer[offset + (width * 3) + 0] = pathColor;
+            for (int i = 6; i < 8; i++) { pixelBuffer[offset + (width * 3) + i] = pathColor; }
+            for (int i = -7; i < -5; i++) { pixelBuffer[offset - (width * 3) + i] = pathColor; }
+            pixelBuffer[offset - (width * 3) + 0] = pathColor;
+            for (int i = 6; i < 8; i++) { pixelBuffer[offset - (width * 3) + i] = pathColor; }
+
+            for (int i = -7; i < -4; i++) { pixelBuffer[offset + (width * 2) + i] = pathColor; }
+            pixelBuffer[offset + (width * 2) + 0] = pathColor;
+            for (int i = 5; i < 8; i++) { pixelBuffer[offset + (width * 2) + i] = pathColor; }
+            for (int i = -7; i < -4; i++) { pixelBuffer[offset - (width * 2) + i] = pathColor; }
+            pixelBuffer[offset - (width * 2) + 0] = pathColor;
+            for (int i = 5; i < 8; i++) { pixelBuffer[offset - (width * 2) + i] = pathColor; }
+
+            for (int i = -7; i < -3; i++) { pixelBuffer[offset + (width * 1) + i] = pathColor; }
+            pixelBuffer[offset + (width * 1) + 0] = pathColor;
+            for (int i = 4; i < 8; i++) { pixelBuffer[offset + (width * 1) + i] = pathColor; }
+            for (int i = -7; i < -3; i++) { pixelBuffer[offset - (width * 1) + i] = pathColor; }
+            pixelBuffer[offset - (width * 1) + 0] = pathColor;
+            for (int i = 4; i < 8; i++) { pixelBuffer[offset - (width * 1) + i] = pathColor; }
+
+            for (int i = -7; i < 8; i++) { pixelBuffer[offset + i] = pathColor; }
         }
 
         void DrawLocation(int offset, int width, Color32 color, bool large, ref Color32[] pixelBuffer, bool highlight = false)
@@ -988,156 +1015,6 @@ namespace OverhauledOverworldTravel
                     }
                 }
             }
-        }
-
-        bool IsLocationLarge(DFRegion.LocationTypes locationType)
-        {
-            return locationType == DFRegion.LocationTypes.TownCity || locationType == DFRegion.LocationTypes.TownHamlet || onlyLargeDots;
-        }
-
-        public static void DrawDestinationCrosshair(int offset, int width, Color32 pathColor, ref Color32[] pixelBuffer, int part)
-        {
-            if (part == 0 || part == 8)
-            {
-                // Top Left or Bottom Right
-                pixelBuffer[offset + (width * 4) + 3] = pathColor;
-                pixelBuffer[offset + (width * 4) + 4] = pathColor;
-                pixelBuffer[offset + (width * 3) + 4] = pathColor;
-                pixelBuffer[offset + width] = pathColor;
-                pixelBuffer[offset] = pathColor;
-                pixelBuffer[offset + 1] = pathColor;
-            }
-            else if (part == 1)
-            {
-                // Top Middle
-                for (int i = 0; i < 5; i++) { pixelBuffer[offset + (width * 4) + i] = pathColor; }
-                for (int i = 0; i < 5; i++) { pixelBuffer[offset + (width * 3) + i] = pathColor; }
-                for (int i = 0; i < 5; i++) { pixelBuffer[offset + (width * 2) + i] = pathColor; }
-                for (int i = 1; i < 4; i++) { pixelBuffer[offset + width + i] = pathColor; }
-                pixelBuffer[offset + 2] = pathColor;
-            }
-            else if (part == 2 || part == 6)
-            {
-                // Top Right or Bottom Left
-                pixelBuffer[offset + (width * 4)] = pathColor;
-                pixelBuffer[offset + (width * 4) + 1] = pathColor;
-                pixelBuffer[offset + (width * 3)] = pathColor;
-                pixelBuffer[offset + width + 4] = pathColor;
-                pixelBuffer[offset + 3] = pathColor;
-                pixelBuffer[offset + 4] = pathColor;
-            }
-            else if (part == 3)
-            {
-                // Left
-                for (int i = 0; i < 3; i++) { pixelBuffer[offset + (width * 4) + i] = pathColor; }
-                for (int i = 0; i < 4; i++) { pixelBuffer[offset + (width * 3) + i] = pathColor; }
-                for (int i = 0; i < 5; i++) { pixelBuffer[offset + (width * 2) + i] = pathColor; }
-                for (int i = 0; i < 4; i++) { pixelBuffer[offset + width + i] = pathColor; }
-                for (int i = 0; i < 3; i++) { pixelBuffer[offset + i] = pathColor; }
-            }
-            else if (part == 4)
-            {
-                // Middle
-                for (int i = 0; i < 5; i++) { pixelBuffer[offset + (width * 2) + i] = pathColor; }
-                for (int i = 0; i < 5; i++) { pixelBuffer[offset + (width * i) + 2] = pathColor; }
-            }
-            else if (part == 5)
-            {
-                // Right
-                for (int i = 2; i < 5; i++) { pixelBuffer[offset + (width * 4) + i] = pathColor; }
-                for (int i = 1; i < 5; i++) { pixelBuffer[offset + (width * 3) + i] = pathColor; }
-                for (int i = 0; i < 5; i++) { pixelBuffer[offset + (width * 2) + i] = pathColor; }
-                for (int i = 1; i < 5; i++) { pixelBuffer[offset + width + i] = pathColor; }
-                for (int i = 2; i < 5; i++) { pixelBuffer[offset + i] = pathColor; }
-            }
-            else if (part == 7)
-            {
-                // Bottom Middle
-                pixelBuffer[offset + (width * 4) + 2] = pathColor;
-                for (int i = 1; i < 4; i++) { pixelBuffer[offset + (width * 3) + i] = pathColor; }
-                for (int i = 0; i < 5; i++) { pixelBuffer[offset + (width * 2) + i] = pathColor; }
-                for (int i = 0; i < 5; i++) { pixelBuffer[offset + width + i] = pathColor; }
-                for (int i = 0; i < 5; i++) { pixelBuffer[offset + i] = pathColor; }
-            }
-        }
-
-        public static void DrawPathLine(int offset, int width, Color32 pathColor, ref Color32[] pixelBuffer)
-        {
-            if (offset < 0)
-            {
-                Debug.LogFormat("Index value is negative: offset = {0}", offset);
-                return;
-            }
-
-            if (offset >= 1280000)
-            {
-                Debug.LogFormat("Offset value is outside bounds of pixelBuffer array: offset = {0}", offset);
-                return;
-            }
-
-            if (offset + (width * 2) + 2 >= 1280000) // Seems to happen when clicking outside game window, to say clear the debug-log in the Unity Editor, not certain why or if this would even be an issue in live.
-            {
-                Debug.LogFormat("Offset value is outside bounds of pixelBuffer array, when added to width: offset = {0}", offset + (width * 2) + 2);
-                return;
-            }
-
-            if (offset + (width * 3) + 3 >= 1280000) // Seems to happen when clicking outside game window, to say clear the debug-log in the Unity Editor, not certain why or if this would even be an issue in live.
-            {
-                Debug.LogFormat("Offset value is outside bounds of pixelBuffer array, when added to width: offset = {0}", offset + (width * 3) + 3);
-                return;
-            }
-
-            if (offset + (width * 4) + 4 >= 1280000) // Seems to happen when clicking outside game window, to say clear the debug-log in the Unity Editor, not certain why or if this would even be an issue in live.
-            {
-                Debug.LogFormat("Offset value is outside bounds of pixelBuffer array, when added to width: offset = {0}", offset + (width * 4) + 4);
-                return;
-            }
-
-            for (int i = 1; i < 4; i++) { pixelBuffer[offset + (width * 3) + i] = pathColor; }
-            for (int i = 1; i < 4; i++) { pixelBuffer[offset + (width * 2) + i] = pathColor; }
-            for (int i = 1; i < 4; i++) { pixelBuffer[offset + (width * 1) + i] = pathColor; }
-        }
-
-        public static void DrawPlayerPosition(int offset, int width, Color32 pathColor, ref Color32[] pixelBuffer)
-        {
-            if (offset < 0)
-            {
-                Debug.LogFormat("Index value is negative: offset = {0}", offset);
-                return;
-            }
-
-            if (offset >= 1280000)
-            {
-                Debug.LogFormat("Offset value is outside bounds of pixelBuffer array: offset = {0}", offset);
-                return;
-            }
-
-            if (offset + (width * 2) + 2 >= 1280000) // Seems to happen when clicking outside game window, to say clear the debug-log in the Unity Editor, not certain why or if this would even be an issue in live.
-            {
-                Debug.LogFormat("Offset value is outside bounds of pixelBuffer array, when added to width: offset = {0}", offset + (width * 2) + 2);
-                return;
-            }
-
-            if (offset + (width * 3) + 3 >= 1280000) // Seems to happen when clicking outside game window, to say clear the debug-log in the Unity Editor, not certain why or if this would even be an issue in live.
-            {
-                Debug.LogFormat("Offset value is outside bounds of pixelBuffer array, when added to width: offset = {0}", offset + (width * 3) + 3);
-                return;
-            }
-
-            if (offset + (width * 4) + 4 >= 1280000) // Seems to happen when clicking outside game window, to say clear the debug-log in the Unity Editor, not certain why or if this would even be an issue in live.
-            {
-                Debug.LogFormat("Offset value is outside bounds of pixelBuffer array, when added to width: offset = {0}", offset + (width * 4) + 4);
-                return;
-            }
-
-            /*pixelBuffer[offset + (width * 4) + 2] = pathColor;
-            for (int i = 1; i < 4; i++) { pixelBuffer[offset + (width * 3) + i] = pathColor; }
-            for (int i = 0; i < 5; i++) { pixelBuffer[offset + (width * 2) + i] = pathColor; }
-            for (int i = 1; i < 4; i++) { pixelBuffer[offset + width + i] = pathColor; }
-            pixelBuffer[offset + 2] = pathColor;*/
-
-            for (int i = 0; i < 5; i++) { pixelBuffer[offset + (width * 2) + i] = pathColor; }
-            for (int i = 0; i < 5; i++) { pixelBuffer[offset + (width * i) + 2] = pathColor; }
         }
 
         // Zoom and pan region texture
@@ -1204,6 +1081,89 @@ namespace OverhauledOverworldTravel
             startFastTravelButton.Enabled = false;
         }
 
+        // perform fast travel actions
+        private void performFastTravel() // Maybe work on getting this to function again tomorrow or next time, with the more exact screen pixel positions, will see.
+        {
+            //RaiseOnPreFastTravelEvent(); // So for these events, I'm not sure how or if you can "piggy-back" off the existing ones from another class/window, really not sure how that might be done, so for now whatever.
+
+            // Cache scene first, if fast travelling while on ship.
+            if (GameManager.Instance.TransportManager.IsOnShip())
+                DaggerfallWorkshop.Game.Serialization.SaveLoadManager.CacheScene(GameManager.Instance.StreamingWorld.SceneName);
+            GameManager.Instance.StreamingWorld.RestoreWorldCompensationHeight(0);
+            GameManager.Instance.StreamingWorld.TeleportToCoordinates((int)endPos.X, (int)endPos.Y, StreamingWorld.RepositionMethods.DirectionFromStartMarker);
+
+            GameManager.Instance.PlayerEntity.CurrentHealth = GameManager.Instance.PlayerEntity.MaxHealth;
+            GameManager.Instance.PlayerEntity.CurrentFatigue = GameManager.Instance.PlayerEntity.MaxFatigue;
+            if (!GameManager.Instance.PlayerEntity.Career.NoRegenSpellPoints)
+                GameManager.Instance.PlayerEntity.CurrentMagicka = GameManager.Instance.PlayerEntity.MaxMagicka;
+
+            DaggerfallUnity.WorldTime.DaggerfallDateTime.RaiseTime(dateTimeInSeconds - initialDateTimeInSeconds);
+
+            // Halt random enemy spawns for next playerEntity update so player isn't bombarded by spawned enemies at the end of a long trip
+            GameManager.Instance.PlayerEntity.PreventEnemySpawns = true;
+
+            // Vampires and characters with Damage from Sunlight disadvantage never arrive between 6am and 6pm regardless of travel type
+            // Otherwise raise arrival time to just after 7am if cautious travel would arrive at night
+            /*if (GameManager.Instance.PlayerEffectManager.HasVampirism() || GameManager.Instance.PlayerEntity.Career.DamageFromSunlight)
+            {
+                if (DaggerfallUnity.Instance.WorldTime.DaggerfallDateTime.IsDay)
+                {
+                    DaggerfallUnity.Instance.WorldTime.DaggerfallDateTime.RaiseTime(
+                        (DaggerfallDateTime.DuskHour - DaggerfallUnity.Instance.WorldTime.DaggerfallDateTime.Hour) * 3600);
+                }
+            }*/
+            /*if (speedCautious)
+            {
+                if ((DaggerfallUnity.WorldTime.DaggerfallDateTime.Hour < 7)
+                    || ((DaggerfallUnity.WorldTime.DaggerfallDateTime.Hour == 7) && (DaggerfallUnity.WorldTime.DaggerfallDateTime.Minute < 10)))
+                {
+                    float raiseTime = (((7 - DaggerfallUnity.WorldTime.DaggerfallDateTime.Hour) * 3600)
+                                        + ((10 - DaggerfallUnity.WorldTime.DaggerfallDateTime.Minute) * 60)
+                                        - DaggerfallUnity.WorldTime.DaggerfallDateTime.Second);
+                    DaggerfallUnity.WorldTime.DaggerfallDateTime.RaiseTime(raiseTime);
+                }
+                else if (DaggerfallUnity.WorldTime.DaggerfallDateTime.Hour > 17)
+                {
+                    float raiseTime = (((31 - DaggerfallUnity.WorldTime.DaggerfallDateTime.Hour) * 3600)
+                    + ((10 - DaggerfallUnity.WorldTime.DaggerfallDateTime.Minute) * 60)
+                    - DaggerfallUnity.WorldTime.DaggerfallDateTime.Second);
+                    DaggerfallUnity.WorldTime.DaggerfallDateTime.RaiseTime(raiseTime);
+                }
+            }*/
+
+            DaggerfallUI.Instance.UserInterfaceManager.PopWindow();
+            this.CloseTravelWindows(true);
+            GameManager.Instance.PlayerEntity.RaiseSkills();
+            DaggerfallUI.Instance.FadeBehaviour.FadeHUDFromBlack();
+
+            //RaiseOnPostFastTravelEvent();
+        }
+
+        public DFPosition ConvertDFPosToExactPixelPos(DFPosition initialPos)
+        {
+            // Get map and dimensions
+            string mapName = selectedRegionMapNames[mapIndex];
+            Vector2 origin = offsetLookup[mapName];
+            int originX = (int)origin.x;
+            int originY = (int)origin.y;
+            int width = (int)regionTextureOverlayPanelRect.width;
+            int height = (int)regionTextureOverlayPanelRect.height;
+            scale = GetRegionMapScale(selectedRegion);
+
+            int widthMulti5 = width * 5;
+
+            // Find middle pixel of DFPosition's map-pixel's 5x5 pixel grid
+            int playerPosExactMiddlePixelBufferIndex = (int)((((height - (initialPos.Y - originY) - 1) * 5 * widthMulti5) + ((initialPos.X - originX) * 5)) * scale) + (widthMulti5 * 2) + 2;
+
+            // Convert above pixel buffer index values to vectors with x and y properties
+            int playerXMapPixel = (int)playerPosExactMiddlePixelBufferIndex % widthMulti5;
+            int playerYMapPixel = Mathf.FloorToInt(playerPosExactMiddlePixelBufferIndex / widthMulti5);
+
+            DFPosition convertedPos = new DFPosition(playerXMapPixel, playerYMapPixel);
+
+            return convertedPos;
+        }
+
         public void DrawMapSection(int originX, int originY, int width, int height, ref Color32[] pixelBuffer, bool circular = false)
         {
             GetDiscoveredLocationsFromHiddenMapMod();
@@ -1254,6 +1214,11 @@ namespace OverhauledOverworldTravel
             }
         }
 
+        bool IsLocationLarge(DFRegion.LocationTypes locationType)
+        {
+            return locationType == DFRegion.LocationTypes.TownCity || locationType == DFRegion.LocationTypes.TownHamlet || onlyLargeDots;
+        }
+
         protected override bool checkLocationDiscovered(ContentReader.MapSummary summary)
         {
             // If ports filter is on, only return true if it's a port
@@ -1279,6 +1244,81 @@ namespace OverhauledOverworldTravel
                 ModManager.Instance.SendModMessage(TravelOptionsMod.HIDDEN_MAP_LOCATIONS_MODNAME, "getDiscoveredMapSummaries", null,
                     (string _, object result) => { discoveredMapSummaries = (HashSet<ContentReader.MapSummary>)result; });
             }*/
+        }
+
+        protected DFPosition GetClickMPCoords()
+        {
+            float scale = GetRegionMapScale(selectedRegion);
+            Vector2 coordinates = GetCoordinates();
+            int x = (int)(coordinates.x / scale);
+            int y = (int)(coordinates.y / scale);
+
+            if (selectedRegion == betonyIndex)      // Manually correct Betony offset
+            {
+                x += 60;
+                y += 212;
+            }
+
+            if (selectedRegion == 61)               // Fix for Cybiades zoom-in map. Map is more zoomed in than for other regions but the pixel coordinates are not scaled to match.
+            {
+                int xDiff = x - 440;
+                int yDiff = y - 340;
+                xDiff /= 4;
+                yDiff /= 4;
+                x = 440 + xDiff;
+                y = 340 + yDiff;
+            }
+
+            return new DFPosition(x, y);
+        }
+
+        private string GetSuffix(int day)
+        {
+            string suffix = "th";
+            if (day == 1 || day == 21)
+                suffix = "st";
+            else if (day == 2 || day == 22)
+                suffix = "nd";
+            else if (day == 3 || day == 33)
+                suffix = "rd";
+
+            return suffix;
+        }
+
+        private string GetTimeMode(int hours, int minute)
+        {
+            string result;
+
+            if (true) // useTwelveHourClock
+            {
+                if (hours == 0)
+                {
+                    result = "12";
+                }
+                else if (hours >= 13)
+                    result = "" + (hours - 12);
+                else
+                    result = "" + hours;
+            }
+            else
+            {
+                //result = "" + hours;
+            }
+
+            if (minute < 10)
+                result += ":0" + minute;
+            else
+                result += ":" + minute;
+
+            if (true) // useTwelveHourClock
+            {
+                if (hours >= 12)
+                    result += " PM";
+                else
+                    result += " AM";
+            }
+
+            return result;
         }
 
         public static int MaskMapId(int mapId)

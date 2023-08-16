@@ -932,6 +932,15 @@ namespace OverhauledOverworldTravel
 
             //for (int i = -2; i < 3; i++) { pixelBuffer[offset + (width * i)] = pathColor; }
             //for (int i = -2; i < 3; i++) { pixelBuffer[offset + i] = pathColor; }
+
+            // For Testing
+            for (int i = -798; i < 799; i++) { pixelBuffer[639200 + 1600 + i] = pathColor; }
+            for (int i = -798; i < 799; i++) { pixelBuffer[639200 + i] = pathColor; }
+            for (int i = -798; i < 799; i++) { pixelBuffer[639200 - 1600 + i] = pathColor; }
+
+            for (int i = -398; i < 399; i++) { pixelBuffer[639200 + (1600 * i) + 1] = pathColor; }
+            for (int i = -398; i < 399; i++) { pixelBuffer[639200 + (1600 * i) + 0] = pathColor; }
+            for (int i = -398; i < 399; i++) { pixelBuffer[639200 + (1600 * i) + -1] = pathColor; }
         }
 
         public static void DrawPathLine(DFPosition pixelPos, int width, Color32 pathColor, ref Color32[] pixelBuffer)
@@ -1086,6 +1095,8 @@ namespace OverhauledOverworldTravel
         {
             //RaiseOnPreFastTravelEvent(); // So for these events, I'm not sure how or if you can "piggy-back" off the existing ones from another class/window, really not sure how that might be done, so for now whatever.
 
+            // Convert previousPlayerPosition to a proper map-pixel value and use in "TeleportToCoordinates" value, still not certain how I'll do that yet, but will find a way.
+
             // Cache scene first, if fast travelling while on ship.
             if (GameManager.Instance.TransportManager.IsOnShip())
                 DaggerfallWorkshop.Game.Serialization.SaveLoadManager.CacheScene(GameManager.Instance.StreamingWorld.SceneName);
@@ -1139,7 +1150,7 @@ namespace OverhauledOverworldTravel
             //RaiseOnPostFastTravelEvent();
         }
 
-        public DFPosition ConvertDFPosToExactPixelPos(DFPosition initialPos)
+        public DFPosition ConvertDFPosToExactPixelPos(DFPosition pos)
         {
             // Get map and dimensions
             string mapName = selectedRegionMapNames[mapIndex];
@@ -1153,11 +1164,39 @@ namespace OverhauledOverworldTravel
             int widthMulti5 = width * 5;
 
             // Find middle pixel of DFPosition's map-pixel's 5x5 pixel grid
-            int playerPosExactMiddlePixelBufferIndex = (int)((((height - (initialPos.Y - originY) - 1) * 5 * widthMulti5) + ((initialPos.X - originX) * 5)) * scale) + (widthMulti5 * 2) + 2;
+            int partY = (height - (pos.Y - originY) - 1) * 5 * widthMulti5;
+            int partX = (int)((pos.X - originX) * 5 * scale);
+            int midPart = (widthMulti5 * 2) + 2;
+            int playerPosExactMiddlePixelBufferIndex = partY + partX + midPart;
 
             // Convert above pixel buffer index values to vectors with x and y properties
-            int playerXMapPixel = (int)playerPosExactMiddlePixelBufferIndex % widthMulti5;
             int playerYMapPixel = Mathf.FloorToInt(playerPosExactMiddlePixelBufferIndex / widthMulti5);
+            int playerXMapPixel = (int)playerPosExactMiddlePixelBufferIndex % widthMulti5;
+
+            DFPosition convertedPos = new DFPosition(playerXMapPixel, playerYMapPixel);
+
+            return convertedPos;
+        }
+
+        public DFPosition ConvertExactPixelPosToDFPos(DFPosition pos) // Use this tomorrow for getting fast travel to work again.
+        {
+            // Get map and dimensions
+            string mapName = selectedRegionMapNames[mapIndex];
+            Vector2 origin = offsetLookup[mapName];
+            int originX = (int)origin.x;
+            int originY = (int)origin.y;
+            int width = (int)regionTextureOverlayPanelRect.width;
+            int height = (int)regionTextureOverlayPanelRect.height;
+            scale = GetRegionMapScale(selectedRegion);
+
+            int widthMulti5 = width * 5;
+
+            int partY = (pos.Y * 1600);
+            int partX = pos.X;
+            int combinedParts = partY + partX;
+
+            int playerYMapPixel = originY + (5 * widthMulti5 * height - partY - 5 * widthMulti5) / (5 * widthMulti5);
+            int playerXMapPixel = (int)(originX + partX / (5 * scale));
 
             DFPosition convertedPos = new DFPosition(playerXMapPixel, playerYMapPixel);
 

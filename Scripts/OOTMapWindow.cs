@@ -138,6 +138,9 @@ namespace OverhauledOverworldTravel
         public static List<DFPosition> currentTravelLinePositionsList = new List<DFPosition>();
         public static List<DFPosition> followingTravelLinePositionsList = new List<DFPosition>();
 
+        public static int previousRegionIndex = -1;
+        public static int currentRegionIndex = -1;
+
         public static bool isPlayerTraveling = false;
         public static bool playerPosAlreadyConverted = false;
 
@@ -565,7 +568,7 @@ namespace OverhauledOverworldTravel
         protected override void ClickHandler(BaseScreenComponent sender, Vector2 position)
         {
             // If allowed handle clicks on map pixels without a location, allowing non-fast travel to any MP coords
-            if (RegionSelected && !locationSelected && !MouseOverOtherRegion)
+            if (RegionSelected && !locationSelected)
             {
                 position.y -= regionPanelOffset;
 
@@ -577,27 +580,40 @@ namespace OverhauledOverworldTravel
                 if (stopTravelButton.Rectangle.Contains(sender.MousePosition) || startFastTravelButton.Rectangle.Contains(sender.MousePosition) || mapClockButton.Rectangle.Contains(sender.MousePosition))
                     return;
 
-                EndPos = GetClickMPCoords();
-
-                destinationPosition = ConvertDFPosToExactPixelPos(EndPos);
-                currentTravelLinePositionsList = FindPixelsBetweenPlayerAndDest();
-                if (currentTravelLinePositionsList.Count > 0)
+                if (!MouseOverOtherRegion)
                 {
-                    nextPlayerPosition.Y = currentTravelLinePositionsList[0].Y;
-                    nextPlayerPosition.X = currentTravelLinePositionsList[0].X;
-                    dateTimeInSeconds += 25;
-                    mapTimeHasChanged = true;
+                    EndPos = GetClickMPCoords();
+
+                    destinationPosition = ConvertDFPosToExactPixelPos(EndPos);
+                    currentTravelLinePositionsList = FindPixelsBetweenPlayerAndDest();
+                    if (currentTravelLinePositionsList.Count > 0)
+                    {
+                        nextPlayerPosition.Y = currentTravelLinePositionsList[0].Y;
+                        nextPlayerPosition.X = currentTravelLinePositionsList[0].X;
+                        dateTimeInSeconds += 25;
+                        mapTimeHasChanged = true;
+                    }
+
+                    UpdatePlayerTravelDotsTexture();
+                    UpdateMapLocationDotsTexture();
+
+                    if (popUp == null)
+                    {
+                        popUp = (DaggerfallTravelPopUp)UIWindowFactory.GetInstanceWithArgs(UIWindowType.TravelPopUp, new object[] { uiManager, uiManager.TopWindow, this });
+                    }
+                    //((TravelOptionsPopUp)popUp).EndPos = GetClickMPCoords();
+                    //uiManager.PushWindow(popUp);
                 }
-
-                UpdatePlayerTravelDotsTexture();
-                UpdateMapLocationDotsTexture();
-
-                if (popUp == null)
+                else
                 {
-                    popUp = (DaggerfallTravelPopUp)UIWindowFactory.GetInstanceWithArgs(UIWindowType.TravelPopUp, new object[] { uiManager, uiManager.TopWindow, this });
+                    // Code to try and handle when clicking into other regions.
+                    previousRegionIndex = currentRegionIndex;
+
+                    OpenRegionPanel(mouseOverRegion);
+
+                    UpdatePlayerTravelDotsTexture(); // Somehow update current "path" being traveled so it matches with the new shift in region, but still shows on the region your path may have started, etc.
+                    UpdateMapLocationDotsTexture();
                 }
-                //((TravelOptionsPopUp)popUp).EndPos = GetClickMPCoords();
-                //uiManager.PushWindow(popUp);
             }
             else
             {
@@ -641,8 +657,10 @@ namespace OverhauledOverworldTravel
             }
         }
 
-        protected virtual void UpdatePlayerTravelDotsTexture()
+        protected virtual void UpdatePlayerTravelDotsTexture() // Tomorrow, consider comparing offsets of previous region to new region being viewed, then multiply that to convert to "exact pixel" buffer index value and try to draw on screen based on that maybe?
         {
+            // Somehow use the new "previousRegionIndex" "currentRegionIndex" values to determine what offset to "slide" over the display to based on offset values multiplied by 1600x800 pixelBuffer most likely, will see.
+
             DFPosition playerWorldPos = TravelTimeCalculator.GetPlayerTravelPosition();
             if (previousPlayerPosition.Y == playerWorldPos.Y && previousPlayerPosition.X == playerWorldPos.X)
             {
@@ -1078,6 +1096,8 @@ namespace OverhauledOverworldTravel
             startFastTravelButton.Enabled = true;
 
             mapClockText.Text = clockDisplayString;
+
+            currentRegionIndex = currentDFRegionIndex;
         }
 
         protected override void CloseRegionPanel()
@@ -1088,6 +1108,9 @@ namespace OverhauledOverworldTravel
             mapClockButton.Enabled = false;
             stopTravelButton.Enabled = false;
             startFastTravelButton.Enabled = false;
+
+            previousRegionIndex = currentRegionIndex;
+            currentRegionIndex = -1;
         }
 
         // perform fast travel actions
@@ -1095,13 +1118,13 @@ namespace OverhauledOverworldTravel
         {
             //RaiseOnPreFastTravelEvent(); // So for these events, I'm not sure how or if you can "piggy-back" off the existing ones from another class/window, really not sure how that might be done, so for now whatever.
 
-            // Convert previousPlayerPosition to a proper map-pixel value and use in "TeleportToCoordinates" value, still not certain how I'll do that yet, but will find a way.
+            DFPosition fastTravelPos = ConvertExactPixelPosToDFPos(previousPlayerPosition);
 
             // Cache scene first, if fast travelling while on ship.
             if (GameManager.Instance.TransportManager.IsOnShip())
                 DaggerfallWorkshop.Game.Serialization.SaveLoadManager.CacheScene(GameManager.Instance.StreamingWorld.SceneName);
             GameManager.Instance.StreamingWorld.RestoreWorldCompensationHeight(0);
-            GameManager.Instance.StreamingWorld.TeleportToCoordinates((int)endPos.X, (int)endPos.Y, StreamingWorld.RepositionMethods.DirectionFromStartMarker);
+            GameManager.Instance.StreamingWorld.TeleportToCoordinates((int)fastTravelPos.X, (int)fastTravelPos.Y, StreamingWorld.RepositionMethods.DirectionFromStartMarker);
 
             GameManager.Instance.PlayerEntity.CurrentHealth = GameManager.Instance.PlayerEntity.MaxHealth;
             GameManager.Instance.PlayerEntity.CurrentFatigue = GameManager.Instance.PlayerEntity.MaxFatigue;
@@ -1191,7 +1214,7 @@ namespace OverhauledOverworldTravel
 
             int widthMulti5 = width * 5;
 
-            int partY = (pos.Y * 1600);
+            int partY = (pos.Y * 1600) - (widthMulti5 * 2);
             int partX = pos.X;
             int combinedParts = partY + partX;
 

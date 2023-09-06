@@ -3,7 +3,7 @@
 // License:         MIT License (http://www.opensource.org/licenses/mit-license.php)
 // Author:          Kirk.O
 // Created On: 	    8/3/2023, 8:40 PM
-// Last Edit:		8/22/2023, 4:40 PM
+// Last Edit:		9/5/2023, 8:50 PM
 // Version:			1.00
 // Special Thanks:  
 // Modifier:
@@ -15,6 +15,7 @@ using DaggerfallWorkshop.Game.Utility.ModSupport.ModSettings;
 using DaggerfallWorkshop.Game.Entity;
 using DaggerfallWorkshop.Game.UserInterfaceWindows;
 using System;
+using Wenzil.Console;
 
 namespace OverhauledOverworldTravel
 {
@@ -35,7 +36,8 @@ namespace OverhauledOverworldTravel
         public static PlayerEntity Player { get { return GameManager.Instance.PlayerEntity; } }
 
         // Mod Textures || GUI
-        public Texture2D GrabModeChoiceMenuTexture;
+        public Texture2D PrimaryWorldMapTexture;
+        public Texture2D BackgroundMapFillerTexture;
 
         [Invoke(StateManager.StateTypes.Start, 0)]
         public static void Init(InitParams initParams)
@@ -60,12 +62,14 @@ namespace OverhauledOverworldTravel
             mod.LoadSettings();
 
             ModCompatibilityChecking();
-			
-			UIWindowFactory.RegisterCustomUIWindow(UIWindowType.TravelMap, typeof(OOTMapWindow));
+            
+            UIWindowFactory.RegisterCustomUIWindow(UIWindowType.TravelMap, typeof(OOTMapWindow));
 
             // Load Resources
             LoadTextures();
             //LoadAudio();
+
+            RegisterOOTCommands();
 
             Debug.Log("Finished mod init: Overhauled Overworld Travel");
         }
@@ -83,13 +87,43 @@ namespace OverhauledOverworldTravel
 
         private void LoadTextures() // Example taken from Penwick Papers Mod
         {
-            /*ModManager modManager = ModManager.Instance;
+            ModManager modManager = ModManager.Instance;
             bool success = true;
 
-            success &= modManager.TryGetAsset("Grab-Mode_Choice_Menu", false, out GrabModeChoiceMenuTexture);
+            success &= modManager.TryGetAsset("320x160_World_Map_Base", false, out PrimaryWorldMapTexture);
+            success &= modManager.TryGetAsset("320x200_Background_Filler", false, out BackgroundMapFillerTexture);
 
             if (!success)
-                throw new Exception("Overhauled Overworld Travel: Missing texture asset");*/
+                throw new Exception("Overhauled Overworld Travel: Missing texture asset");
+        }
+
+        public static void RegisterOOTCommands()
+        {
+            Debug.Log("[OverhauledOverworldTravel] Trying to register console commands.");
+            try
+            {
+                ConsoleCommandsDatabase.RegisterCommand(ShowOOTWorldMapWindow.command, ShowOOTWorldMapWindow.description, ShowOOTWorldMapWindow.usage, ShowOOTWorldMapWindow.Execute);
+            }
+            catch (Exception e)
+            {
+                Debug.LogError(string.Format("Error Registering OverhauledOverworldTravel Console commands: {0}", e.Message));
+            }
+        }
+
+        private static class ShowOOTWorldMapWindow
+        {
+            public static readonly string command = "showmap";
+            public static readonly string description = "Shows the custom Overhauled Overworld Travel Map Window.)";
+            public static readonly string usage = "showmap";
+
+            public static string Execute(params string[] args)
+            {
+                NewOOTMapWindow ootWorldMapWindow;
+
+                ootWorldMapWindow = new NewOOTMapWindow(DaggerfallUI.UIManager);
+                DaggerfallUI.UIManager.PushWindow(ootWorldMapWindow);
+                return "Complete";
+            }
         }
     }
 }

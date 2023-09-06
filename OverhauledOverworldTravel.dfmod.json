@@ -4,12 +4,16 @@
     "ModAuthor": "Kirk.O",
     "ContactInfo": "kirkoliveri@gmail.com",
     "DFUnity_Version": "0.14.5",
-	"ModDescription": "Reworks travel on the world-map, so that it functions similar to Fallout 1 & 2, and games with similar fast-travel systems.",
+    "ModDescription": "Reworks travel on the world-map, so that it functions similar to Fallout 1 & 2, and games with similar fast-travel systems.",
     "GUID": "22d4b4f1-e2d1-481a-89ca-ec6522fbf76f",
     "Files": [
         "Assets/Game/Mods/DFU-Mod_Overhauled-Overworld-Travel/modsettings.json",
         "Assets/Game/Mods/DFU-Mod_Overhauled-Overworld-Travel/Scripts/OOTMain.cs",
-        "Assets/Game/Mods/DFU-Mod_Overhauled-Overworld-Travel/Scripts/OOTMapWindow.cs"
+        "Assets/Game/Mods/DFU-Mod_Overhauled-Overworld-Travel/Scripts/OOTMapWindow.cs",
+        "Assets/Game/Mods/DFU-Mod_Overhauled-Overworld-Travel/Scripts/NewOOTMapWindow.cs",
+        "Assets/Game/Mods/DFU-Mod_Overhauled-Overworld-Travel/Textures/320x160_World_Map_Base.png",
+        "Assets/Game/Mods/DFU-Mod_Overhauled-Overworld-Travel/OverhauledOverworldTravel.dfmod.json",
+        "Assets/Game/Mods/DFU-Mod_Overhauled-Overworld-Travel/Textures/320x200_Background_Filler.png"
     ],
     "Dependencies": []
 }

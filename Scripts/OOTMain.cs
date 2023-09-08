@@ -3,7 +3,7 @@
 // License:         MIT License (http://www.opensource.org/licenses/mit-license.php)
 // Author:          Kirk.O
 // Created On: 	    8/3/2023, 8:40 PM
-// Last Edit:		9/5/2023, 8:50 PM
+// Last Edit:		9/7/2023, 10:20 PM
 // Version:			1.00
 // Special Thanks:  
 // Modifier:
@@ -38,6 +38,7 @@ namespace OverhauledOverworldTravel
         // Mod Textures || GUI
         public Texture2D PrimaryWorldMapTexture;
         public Texture2D BackgroundMapFillerTexture;
+        public Texture2D WorldHeightMapTexture;
 
         [Invoke(StateManager.StateTypes.Start, 0)]
         public static void Init(InitParams initParams)
@@ -92,6 +93,7 @@ namespace OverhauledOverworldTravel
 
             success &= modManager.TryGetAsset("320x160_World_Map_Base", false, out PrimaryWorldMapTexture);
             success &= modManager.TryGetAsset("320x200_Background_Filler", false, out BackgroundMapFillerTexture);
+            success &= modManager.TryGetAsset("1000x500_World_Height-Map", false, out WorldHeightMapTexture);
 
             if (!success)
                 throw new Exception("Overhauled Overworld Travel: Missing texture asset");

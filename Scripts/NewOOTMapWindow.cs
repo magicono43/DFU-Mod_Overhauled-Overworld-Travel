@@ -51,6 +51,8 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
         Texture2D backgroundTexture;
         Texture2D heightMapTexture;
 
+        Panel worldMapPanel;
+
         Panel locationDotOverlayPanel;
         Texture2D locationDotTexture;
         Color32[] locationDotPixelBuffer;
@@ -60,6 +62,8 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
         Color32[] travelPathPixelBuffer;
 
         #endregion
+
+        bool alreadyZoomed = false;
 
         Dictionary<string, Vector2> offsetLookup = new Dictionary<string, Vector2>();
 
@@ -95,7 +99,7 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             NativePanel.BackgroundColor = ScreenDimColor;
             //NativePanel.BackgroundTexture = baseTexture;
 
-            Panel worldMapPanel = new Panel();
+            worldMapPanel = new Panel();
             worldMapPanel.HorizontalAlignment = HorizontalAlignment.Center;
             worldMapPanel.VerticalAlignment = VerticalAlignment.Middle;
             worldMapPanel.Size = new Vector2(1000, 500);
@@ -105,6 +109,7 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             worldMapPanel.ToolTip = defaultToolTip;
             worldMapPanel.ToolTipText = "This Is The World Map";
             worldMapPanel.OnMouseClick += ClickHandler;
+            worldMapPanel.OnRightMouseClick += RightClickHandler;
             if (ParentPanel != null)
                 ParentPanel.Components.Add(worldMapPanel);
 
@@ -192,7 +197,6 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             int flippedY = (int)(mainMapRect.height - clickedPos.y - 1); // To compensate for the pixelBuffer index starting at the opposite part of the screen as the (0, 0) origin for the screen.
             int pixelBufferPos = (int)(flippedY * mainMapRect.width + clickedPos.x);
 
-            // Perhaps tomorrow, see about getting the map locations to render on-screen using pixelBuffer, similar to how Hazelnut did it, but with this different coord. system, will see.
             TestPlacingDaggerfallLocationDots();
 
             TestWherePixelBufferIsLocated(pixelBufferPos);
@@ -218,7 +222,82 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             }*/
         }
 
-        void TestPlacingDaggerfallLocationDots() // Guess I'll work on this more tomorrow, good progress due to Interkarma's added info about the 1000x500 world-size.
+        // Handle right clicks on the world map panel
+        void RightClickHandler(BaseScreenComponent sender, Vector2 position)
+        {
+            Rect mainMapRect = sender.Rectangle;
+
+            // Ensure clicks are inside region texture
+            if (position.x < 0 || position.x > mainMapRect.width || position.y < 0 || position.y > mainMapRect.height)
+                return;
+
+            // Play distinct sound just for testing right now.
+            DaggerfallUI.Instance.PlayOneShot(DaggerfallUI.Instance.GetAudioClip(SoundClips.GoldPieces));
+
+            Vector2 clickedPos = sender.ScaledMousePosition;
+            Debug.LogFormat("Right Clicked This Spot: x:{0} y:{1}", clickedPos.x, clickedPos.y);
+
+            int flippedY = (int)(mainMapRect.height - clickedPos.y - 1); // To compensate for the pixelBuffer index starting at the opposite part of the screen as the (0, 0) origin for the screen.
+            int pixelBufferPos = (int)(flippedY * mainMapRect.width + clickedPos.x);
+
+            ZoomMapTexture(clickedPos);
+        }
+
+        void ZoomMapTexture(Vector2 clickedPos) // Attempt to get some form of zooming to work on the world map.
+        {
+            // Exit cropped rendering
+            if (alreadyZoomed)
+            {
+                worldMapPanel.BackgroundTextureLayout = BackgroundLayout.StretchToFill;
+                locationDotOverlayPanel.BackgroundTextureLayout = BackgroundLayout.StretchToFill;
+                travelPathOverlayPanel.BackgroundTextureLayout = BackgroundLayout.StretchToFill;
+                alreadyZoomed = false;
+                return;
+            }
+
+            // Got basic zooming working. Maybe tomorrow I'll try to polish this more, maybe get a "draggable zoom" thing to work like DFU has holding shift, etc.
+
+            int zoomFactor = 4;
+
+            // Centre cropped porition over mouse using classic dimensions
+            int width = 1000;
+            int height = 500;
+            int zoomWidth = width / (zoomFactor * 2);
+            int zoomHeight = height / (zoomFactor * 2);
+            int startX = (int)clickedPos.x - zoomWidth;
+            int startY = (int)(height + (-clickedPos.y - zoomHeight));
+
+            // Clamp to edges
+            if (startX < 0)
+                startX = 0;
+            else if (startX + width / zoomFactor >= width)
+                startX = width - width / zoomFactor;
+            if (startY < 0)
+                startY = 0;
+            else if (startY + height / zoomFactor >= height)
+                startY = height - height / zoomFactor;
+
+            Vector2 zoomOffset = new Vector2(startX, startY);
+
+            // Set cropped area in region texture - can be a replacement texture so need to determine ratio compared to classic
+            /*float ratioX = regionTexture.width / (float)width;
+            float ratioY = regionTexture.height / (float)height;
+            regionTextureOverlayPanel.BackgroundTextureLayout = BackgroundLayout.Cropped;
+            regionTextureOverlayPanel.BackgroundCroppedRect = new Rect(startX * ratioX, startY * ratioY, width / zoomFactor * ratioX, height / zoomFactor * ratioY);*/
+
+            // Set cropped area in location dots panel - always at classic dimensions
+            Rect worldMapNewRect = new Rect(startX, startY, width / zoomFactor, height / zoomFactor);
+            worldMapPanel.BackgroundTextureLayout = BackgroundLayout.Cropped;
+            worldMapPanel.BackgroundCroppedRect = worldMapNewRect;
+            locationDotOverlayPanel.BackgroundTextureLayout = BackgroundLayout.Cropped;
+            locationDotOverlayPanel.BackgroundCroppedRect = worldMapNewRect;
+            travelPathOverlayPanel.BackgroundTextureLayout = BackgroundLayout.Cropped;
+            travelPathOverlayPanel.BackgroundCroppedRect = worldMapNewRect;
+
+            alreadyZoomed = true;
+        }
+
+        void TestPlacingDaggerfallLocationDots()
         {
             Array.Clear(locationDotPixelBuffer, 0, locationDotPixelBuffer.Length);
 

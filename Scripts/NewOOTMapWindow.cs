@@ -63,7 +63,7 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
 
         #endregion
 
-        bool alreadyZoomed = false;
+        int currentZoom = 1;
 
         Dictionary<string, Vector2> offsetLookup = new Dictionary<string, Vector2>();
 
@@ -140,6 +140,11 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             chestPictureBox.BackgroundColor = new Color(0.9f, 0.1f, 0.5f, 0.75f); // For testing purposes
             chestPictureBox.ToolTip = defaultToolTip;
             chestPictureBox.ToolTipText = "The Chest Looks";
+
+            // Zoom Out Button
+            Button zoomOutButton = DaggerfallUI.AddButton(new Rect(0, 0, 0, 0), worldMapPanel);
+            zoomOutButton.Hotkey = new HotkeySequence(KeyCode.Semicolon, HotkeySequence.KeyModifiers.None);
+            zoomOutButton.OnKeyboardEvent += ZoomOutMap_OnKeyboardEvent;
 
             // Exit Button
             Button exitButton = DaggerfallUI.AddButton(new Rect(139, 122, 43, 15), NativePanel);
@@ -231,35 +236,65 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             if (position.x < 0 || position.x > mainMapRect.width || position.y < 0 || position.y > mainMapRect.height)
                 return;
 
-            // Play distinct sound just for testing right now.
-            DaggerfallUI.Instance.PlayOneShot(DaggerfallUI.Instance.GetAudioClip(SoundClips.GoldPieces));
-
             Vector2 clickedPos = sender.ScaledMousePosition;
-            Debug.LogFormat("Right Clicked This Spot: x:{0} y:{1}", clickedPos.x, clickedPos.y);
 
             int flippedY = (int)(mainMapRect.height - clickedPos.y - 1); // To compensate for the pixelBuffer index starting at the opposite part of the screen as the (0, 0) origin for the screen.
             int pixelBufferPos = (int)(flippedY * mainMapRect.width + clickedPos.x);
 
-            ZoomMapTexture(clickedPos);
+            DaggerfallUI.Instance.PlayOneShot(DaggerfallUI.Instance.GetAudioClip(SoundClips.GoldPieces));
+            Debug.LogFormat("Right Clicked This Spot: x:{0} y:{1}", clickedPos.x, clickedPos.y);
+
+            ZoomMapTexture(clickedPos, true);
         }
 
-        void ZoomMapTexture(Vector2 clickedPos) // Attempt to get some form of zooming to work on the world map.
+        void ZoomOutMap_OnKeyboardEvent(BaseScreenComponent sender, Event keyboardEvent)
         {
-            // Exit cropped rendering
-            if (alreadyZoomed)
+            if (keyboardEvent.type == EventType.KeyDown)
             {
-                worldMapPanel.BackgroundTextureLayout = BackgroundLayout.StretchToFill;
-                locationDotOverlayPanel.BackgroundTextureLayout = BackgroundLayout.StretchToFill;
-                travelPathOverlayPanel.BackgroundTextureLayout = BackgroundLayout.StretchToFill;
-                alreadyZoomed = false;
-                return;
+                Rect mainMapRect = sender.Parent.Rectangle;
+                float mousePosX = sender.Parent.ScaledMousePosition.x;
+                float mousePosY = sender.Parent.ScaledMousePosition.y;
+
+                // Ensure cursor is inside region texture when this key is pressed
+                if (mousePosX < 0 || mousePosX > mainMapRect.width || mousePosY < 0 || mousePosY > mainMapRect.height)
+                    return;
+
+                Vector2 cursorPos = sender.Parent.ScaledMousePosition;
+
+                DaggerfallUI.Instance.PlayOneShot(DaggerfallUI.Instance.GetAudioClip(SoundClips.PlayerDoorBash));
+                Debug.LogFormat("Zoom Key Pressed While Mouse Cursor In This Spot: x:{0} y:{1}", cursorPos.x, cursorPos.y);
+
+                ZoomMapTexture(cursorPos, false);
+            }
+        }
+
+        void ZoomMapTexture(Vector2 clickedPos, bool zoomIn) // Attempt to get some form of zooming to work on the world map.
+        {
+            int zoomFactor = 1;
+            worldMapPanel.BackgroundTextureLayout = BackgroundLayout.StretchToFill;
+            locationDotOverlayPanel.BackgroundTextureLayout = BackgroundLayout.StretchToFill;
+            travelPathOverlayPanel.BackgroundTextureLayout = BackgroundLayout.StretchToFill;
+
+            if (zoomIn)
+            {
+                if (currentZoom == 1) { zoomFactor = 2; currentZoom = 2; }
+                else if (currentZoom == 2) { zoomFactor = 4; currentZoom = 4; }
+                else if (currentZoom == 4) { zoomFactor = 5; currentZoom = 5; }
+                else if (currentZoom == 5) { zoomFactor = 10; currentZoom = 10; }
+                else if (currentZoom == 10) { zoomFactor = 10; currentZoom = 10; }
+            }
+            else
+            {
+                if (currentZoom == 1) { currentZoom = 1; return; }
+                else if (currentZoom == 2) { currentZoom = 1; return; }
+                else if (currentZoom == 4) { zoomFactor = 2; currentZoom = 2; }
+                else if (currentZoom == 5) { zoomFactor = 4; currentZoom = 4; }
+                else if (currentZoom == 10) { zoomFactor = 5; currentZoom = 5; }
             }
 
-            // Got basic zooming working. Maybe tomorrow I'll try to polish this more, maybe get a "draggable zoom" thing to work like DFU has holding shift, etc.
+            // Got basic zoom-in and zoom-out working. Tomorrow maybe do more testing and polishing of this, as well as maybe try to implement the "draggable zoom" thing as well, etc.
 
-            int zoomFactor = 4;
-
-            // Centre cropped porition over mouse using classic dimensions
+            // Center cropped portion over mouse using classic dimensions
             int width = 1000;
             int height = 500;
             int zoomWidth = width / (zoomFactor * 2);
@@ -293,8 +328,6 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             locationDotOverlayPanel.BackgroundCroppedRect = worldMapNewRect;
             travelPathOverlayPanel.BackgroundTextureLayout = BackgroundLayout.Cropped;
             travelPathOverlayPanel.BackgroundCroppedRect = worldMapNewRect;
-
-            alreadyZoomed = true;
         }
 
         void TestPlacingDaggerfallLocationDots()

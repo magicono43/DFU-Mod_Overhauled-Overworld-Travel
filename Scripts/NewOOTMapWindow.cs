@@ -8,6 +8,8 @@ using DaggerfallWorkshop.Game.Serialization;
 using OverhauledOverworldTravel;
 using System;
 using System.Collections.Generic;
+using DaggerfallConnect;
+using DaggerfallWorkshop.Utility.AssetInjection;
 
 namespace DaggerfallWorkshop.Game.UserInterfaceWindows
 {
@@ -61,15 +63,28 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
         Texture2D travelPathTexture;
         Color32[] travelPathPixelBuffer;
 
+        Panel mouseCursorHitboxOverlayPanel;
+        Texture2D mouseCursorHitboxTexture;
+        Color32[] mouseCursorHitboxPixelBuffer;
+
+        TextLabel regionLabel;
+        TextLabel firstDebugLabel;
+        TextLabel secondDebugLabel;
+        TextLabel thirdDebugLabel;
+
         #endregion
 
         int currentZoom = 1;
-        Vector2 zoomPosition = new Vector2(0, 0);
+        Vector2 zoomPosition = Vector2.zero;
+        Vector2 zoomOffset = Vector2.zero;
+        Vector2 lastMousePos = Vector2.zero;
 
         Dictionary<string, Vector2> offsetLookup = new Dictionary<string, Vector2>();
 
         public static Vector2 GetWorldMapPanelSize()
         {
+            return new Vector2(1000, 500);
+            /*
             int screenWidth = DaggerfallUnity.Settings.ResolutionWidth;
             int screenHeight = DaggerfallUnity.Settings.ResolutionHeight;
 
@@ -78,6 +93,7 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             else if (screenWidth >= 960 && screenHeight >= 480) { return new Vector2(960, 480); }
             else if (screenWidth >= 640 && screenHeight >= 320) { return new Vector2(640, 320); }
             else { return new Vector2(320, 160); }
+            */
         }
 
         protected override void Setup()
@@ -115,6 +131,24 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
 
             Rect rectWorldMap = worldMapPanel.Rectangle;
 
+            // Add region/location label
+            regionLabel = DaggerfallUI.AddTextLabel(DaggerfallUI.LargeFont, new Vector2(0, 2), string.Empty, worldMapPanel);
+            regionLabel.HorizontalAlignment = HorizontalAlignment.Center;
+            regionLabel.TextScale = 2.7f;
+
+            // Add debug display labels
+            firstDebugLabel = DaggerfallUI.AddTextLabel(DaggerfallUI.LargeFont, new Vector2(0, 2), string.Empty, worldMapPanel);
+            firstDebugLabel.HorizontalAlignment = HorizontalAlignment.Left;
+            firstDebugLabel.TextScale = 2.0f;
+
+            secondDebugLabel = DaggerfallUI.AddTextLabel(DaggerfallUI.LargeFont, new Vector2(0, 25), string.Empty, worldMapPanel);
+            secondDebugLabel.HorizontalAlignment = HorizontalAlignment.Left;
+            secondDebugLabel.TextScale = 2.0f;
+
+            thirdDebugLabel = DaggerfallUI.AddTextLabel(DaggerfallUI.LargeFont, new Vector2(0, 48), string.Empty, worldMapPanel);
+            thirdDebugLabel.HorizontalAlignment = HorizontalAlignment.Left;
+            thirdDebugLabel.TextScale = 2.0f;
+
             // Overlay for the map locations panel
             locationDotOverlayPanel = DaggerfallUI.AddPanel(rectWorldMap, worldMapPanel);
             locationDotOverlayPanel.HorizontalAlignment = HorizontalAlignment.Center;
@@ -135,6 +169,17 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             travelPathPixelBuffer = new Color32[(int)rectWorldMap.width * (int)rectWorldMap.height];
             travelPathTexture = new Texture2D((int)rectWorldMap.width, (int)rectWorldMap.height, TextureFormat.ARGB32, false);
             travelPathTexture.filterMode = FilterMode.Point;
+
+            // Overlay for the mouse cursor hitbox panel
+            mouseCursorHitboxOverlayPanel = DaggerfallUI.AddPanel(rectWorldMap, worldMapPanel); // May have to make the Parent panel this panel's parent similar to the worldMapPanel, will see.
+            mouseCursorHitboxOverlayPanel.HorizontalAlignment = HorizontalAlignment.Center;
+            mouseCursorHitboxOverlayPanel.VerticalAlignment = VerticalAlignment.Middle;
+            //travelPathOverlayPanel.BackgroundColor = new Color(0.9f, 0.1f, 0.5f, 0.75f); // For testing purposes
+
+            // Setup pixel buffer and texture for mouse cursor hitbox area
+            mouseCursorHitboxPixelBuffer = new Color32[(int)rectWorldMap.width * (int)rectWorldMap.height];
+            mouseCursorHitboxTexture = new Texture2D((int)rectWorldMap.width, (int)rectWorldMap.height, TextureFormat.ARGB32, false);
+            mouseCursorHitboxTexture.filterMode = FilterMode.Point;
 
             Panel chestPictureBox = DaggerfallUI.AddPanel(new Rect(113, 64, 30, 22), NativePanel);
             chestPictureBox.BackgroundColor = new Color(0.9f, 0.1f, 0.5f, 0.75f); // For testing purposes
@@ -187,17 +232,39 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
         {
             base.Update();
 
-            // Now that I have a fairly basic but functional zoom in/out feature working. Tomorrow I think I'll maybe try to get mousing over the location dots to do something, will see.
-
             // Input handling
             HotkeySequence.KeyModifiers keyModifiers = HotkeySequence.GetKeyboardKeyModifiers();
-            Vector2 currentMousePos = new Vector2(0, 0);
-            Rect mainMapRect = new Rect(0, 0, 0, 0);
+            Vector2 currentMousePos = Vector2.zero;
+            Rect mainMapRect = Rect.zero;
             if (worldMapPanel != null) { currentMousePos = new Vector2(worldMapPanel.ScaledMousePosition.x, worldMapPanel.ScaledMousePosition.y); mainMapRect = worldMapPanel.Rectangle; }
+
+            if (currentMousePos.x != lastMousePos.x || currentMousePos.y != lastMousePos.y)
+            {
+                lastMousePos.x = currentMousePos.x;
+                lastMousePos.y = currentMousePos.y;
+
+                // Ensure cursor is inside map texture
+                if (currentMousePos.x < 0 || currentMousePos.x > mainMapRect.width || currentMousePos.y < 0 || currentMousePos.y > mainMapRect.height)
+                    return;
+
+                int flippedY = (int)(mainMapRect.height - currentMousePos.y - 1); // To compensate for the pixelBuffer index starting at the opposite part of the screen as the (0, 0) origin for the screen.
+                int pixelBufferPos = (int)(flippedY * mainMapRect.width + currentMousePos.x);
+
+                if (currentZoom > 1)
+                {
+                    int usedPosX = (int)((currentMousePos.x + (zoomOffset.x * currentZoom)) / currentZoom);
+                    int usedPosY = (int)((currentMousePos.y + (zoomOffset.y * currentZoom)) / currentZoom);
+                    flippedY = (int)(mainMapRect.height - usedPosY - 1);
+                    pixelBufferPos = (int)(flippedY * mainMapRect.width + usedPosX);
+                }
+
+                UpdateMouseOverLocationLabel(currentMousePos);
+                TestWhereMouseCursorHitboxIsLocated(pixelBufferPos);
+            }
 
             if (InputManager.Instance.GetMouseButtonUp(1))
             {
-                // Ensure clicks are inside region texture
+                // Ensure clicks are inside map texture
                 if (currentMousePos.x < 0 || currentMousePos.x > mainMapRect.width || currentMousePos.y < 0 || currentMousePos.y > mainMapRect.height)
                     return;
 
@@ -214,13 +281,75 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             }
             else if ((Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift)) && currentZoom > 1)
             {
-                // Ensure clicks are inside region texture
+                // Ensure clicks are inside map texture
                 if (currentMousePos.x < 0 || currentMousePos.x > mainMapRect.width || currentMousePos.y < 0 || currentMousePos.y > mainMapRect.height)
                     return;
 
                 // Scrolling while zoomed in
                 zoomPosition = currentMousePos;
                 ZoomMapTexture(true, false);
+            }
+        }
+
+        // Will update the text label showing the location name (if any) currently moused over on the map
+        void UpdateMouseOverLocationLabel(Vector2 currentMousePos)
+        {
+            Vector2 testingZoomMousePos = Vector2.zero;
+            testingZoomMousePos.x = zoomOffset.x;
+            testingZoomMousePos.y = zoomOffset.y;
+
+            Vector2 testingScaledMousePos = new Vector2(currentMousePos.x, currentMousePos.y);
+            Vector2 testingMousePos = new Vector2(testingZoomMousePos.x, testingZoomMousePos.y);
+
+            firstDebugLabel.Text = string.Format("ScaledMousePos: ({0}, {1})", testingScaledMousePos.x, testingScaledMousePos.y);
+            secondDebugLabel.Text = string.Format("ZoomedMousePos: ({0}, {1})", testingMousePos.x, testingMousePos.y);
+            thirdDebugLabel.Text = string.Format("Magnification: {0}x", currentZoom);
+
+            int usedPosX = (int)((currentMousePos.x + (zoomOffset.x * currentZoom)) / currentZoom);
+            int usedPosY = (int)((currentMousePos.y + (zoomOffset.y * currentZoom)) / currentZoom);
+
+            ContentReader.MapSummary mapSummary;
+            if (DaggerfallUnity.Instance.ContentReader.HasLocation(usedPosX, usedPosY, out mapSummary)) { }
+            else if (DaggerfallUnity.Instance.ContentReader.HasLocation(usedPosX, usedPosY - 1, out mapSummary)) { }
+            else if (DaggerfallUnity.Instance.ContentReader.HasLocation(usedPosX + 1, usedPosY - 1, out mapSummary)) { }
+            else { DaggerfallUnity.Instance.ContentReader.HasLocation(usedPosX + 1, usedPosY, out mapSummary); }
+
+            string regionName = DaggerfallUnity.ContentReader.MapFileReader.GetRegionName(mapSummary.RegionIndex);
+            string locationName = GetLocationNameInCurrentRegion(mapSummary.RegionIndex, mapSummary.MapIndex);
+            int mapPixelID = mapSummary.ID;
+            if (locationName == string.Empty) // Keep label from showing up if no valid location is moused over.
+            {
+                regionLabel.Text = string.Empty;
+            }
+            else
+            {
+                regionLabel.Text = string.Format("{0} : {1} ({2})", regionName, locationName, mapPixelID);
+            }
+        }
+
+        // Gets name of location in currently moused over region - tries world data replacement then falls back to MAPS.BSA
+        string GetLocationNameInCurrentRegion(int regionIndex, int locationIndex)
+        {
+            // Must have a region open
+            if (regionIndex == -1)
+                return string.Empty;
+
+            // Just a work around for now, since "invalid space" gets a 0 and 0 value rather than -1 and -1 like I expected. So this specific location in Alik'r Desert is ignored for now.
+            if (regionIndex == 0 && locationIndex == 0)
+                return string.Empty;
+
+            // Get location name from world data replacement if available or fall back to MAPS.BSA cached names
+            DFLocation location;
+            if (WorldDataReplacement.GetDFLocationReplacementData(regionIndex, locationIndex, out location))
+            {
+                return location.Name;
+            }
+            else
+            {
+                DFRegion dfRegion = DaggerfallUnity.Instance.ContentReader.MapFileReader.GetRegion(regionIndex);
+                string locationName = dfRegion.MapNames[locationIndex];
+
+                return locationName;
             }
         }
 
@@ -241,6 +370,14 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
 
             int flippedY = (int)(mainMapRect.height - clickedPos.y - 1); // To compensate for the pixelBuffer index starting at the opposite part of the screen as the (0, 0) origin for the screen.
             int pixelBufferPos = (int)(flippedY * mainMapRect.width + clickedPos.x);
+
+            if (currentZoom > 1)
+            {
+                int usedPosX = (int)((clickedPos.x + (zoomOffset.x * currentZoom)) / currentZoom);
+                int usedPosY = (int)((clickedPos.y + (zoomOffset.y * currentZoom)) / currentZoom);
+                flippedY = (int)(mainMapRect.height - usedPosY - 1);
+                pixelBufferPos = (int)(flippedY * mainMapRect.width + usedPosX);
+            }
 
             TestPlacingDaggerfallLocationDots();
 
@@ -281,6 +418,7 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
                 worldMapPanel.BackgroundTextureLayout = BackgroundLayout.StretchToFill;
                 locationDotOverlayPanel.BackgroundTextureLayout = BackgroundLayout.StretchToFill;
                 travelPathOverlayPanel.BackgroundTextureLayout = BackgroundLayout.StretchToFill;
+                mouseCursorHitboxOverlayPanel.BackgroundTextureLayout = BackgroundLayout.StretchToFill;
 
                 if (zoomIn)
                 {
@@ -292,8 +430,8 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
                 }
                 else
                 {
-                    if (currentZoom == 1) { currentZoom = 1; return; }
-                    else if (currentZoom == 2) { currentZoom = 1; return; }
+                    if (currentZoom == 1) { currentZoom = 1; zoomOffset = Vector2.zero; return; }
+                    else if (currentZoom == 2) { currentZoom = 1; zoomOffset = Vector2.zero; return; }
                     else if (currentZoom == 4) { zoomFactor = 2; currentZoom = 2; }
                     else if (currentZoom == 5) { zoomFactor = 4; currentZoom = 4; }
                     else if (currentZoom == 10) { zoomFactor = 5; currentZoom = 5; }
@@ -332,7 +470,7 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             else if (startY + height / zoomFactor >= height)
                 startY = height - height / zoomFactor;
 
-            Vector2 zoomOffset = new Vector2(startX, startY);
+            zoomOffset = new Vector2(startX, Mathf.Abs(startY - height) - (height / zoomFactor));
 
             // Set cropped area in location dots panel - always at classic dimensions
             Rect worldMapNewRect = new Rect(startX, startY, width / zoomFactor, height / zoomFactor);
@@ -342,6 +480,8 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             locationDotOverlayPanel.BackgroundCroppedRect = worldMapNewRect;
             travelPathOverlayPanel.BackgroundTextureLayout = BackgroundLayout.Cropped;
             travelPathOverlayPanel.BackgroundCroppedRect = worldMapNewRect;
+            mouseCursorHitboxOverlayPanel.BackgroundTextureLayout = BackgroundLayout.Cropped;
+            mouseCursorHitboxOverlayPanel.BackgroundCroppedRect = worldMapNewRect;
         }
 
         void TestPlacingDaggerfallLocationDots()
@@ -371,6 +511,8 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
                     }
                 }
             }
+
+            // Maybe tomorrow, try to get the location dots to have the "proper" color based on the location type, then may try to get color on the map texture, will see.
 
             /*foreach (KeyValuePair<string, Vector2> entry in offsetLookup)
             {
@@ -467,6 +609,32 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
 
             for (int i = -3; i < 3; i++) { pixelBuffer[pixelPos + (width * i)] = whiteColor; }
             for (int i = -3; i < 3; i++) { pixelBuffer[pixelPos + (width * i) - 1] = whiteColor; }
+        }
+
+        void TestWhereMouseCursorHitboxIsLocated(int hitboxCenter)
+        {
+            Vector2 mapDimensions = GetWorldMapPanelSize();
+            int width = (int)mapDimensions.x;
+            int height = (int)mapDimensions.y;
+
+            Array.Clear(mouseCursorHitboxPixelBuffer, 0, mouseCursorHitboxPixelBuffer.Length);
+
+            DrawMouseCursorHitboxArea(hitboxCenter, width, ref mouseCursorHitboxPixelBuffer);
+
+            // Apply updated color array to texture
+            mouseCursorHitboxTexture.SetPixels32(mouseCursorHitboxPixelBuffer);
+            mouseCursorHitboxTexture.Apply();
+
+            // Present texture
+            mouseCursorHitboxOverlayPanel.BackgroundTexture = mouseCursorHitboxTexture;
+        }
+
+        void DrawMouseCursorHitboxArea(int pixelPos, int width, ref Color32[] pixelBuffer) // Right now assuming 2x2 "pixel" size or 4 area, will need to consider other resolution values later.
+        {
+            pixelBuffer[pixelPos] = whiteColor;
+            pixelBuffer[pixelPos + 1] = whiteColor;
+            pixelBuffer[pixelPos + width] = whiteColor;
+            pixelBuffer[pixelPos + width + 1] = whiteColor;
         }
 
         int GetRegionIndexByMapName(string mapName)

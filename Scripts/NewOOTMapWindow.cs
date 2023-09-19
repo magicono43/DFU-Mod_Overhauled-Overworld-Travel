@@ -10,6 +10,7 @@ using System;
 using System.Collections.Generic;
 using DaggerfallConnect;
 using DaggerfallWorkshop.Utility.AssetInjection;
+using System.IO;
 
 namespace DaggerfallWorkshop.Game.UserInterfaceWindows
 {
@@ -79,6 +80,8 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
         Vector2 zoomOffset = Vector2.zero;
         Vector2 lastMousePos = Vector2.zero;
 
+        Color32[] locationPixelColors;
+
         Dictionary<string, Vector2> offsetLookup = new Dictionary<string, Vector2>();
 
         public static Vector2 GetWorldMapPanelSize()
@@ -99,6 +102,30 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
         protected override void Setup()
         {
             base.Setup();
+
+            // Set location pixel colors and identify flash color from palette file
+            DFPalette colors = new DFPalette();
+            if (!colors.Load(Path.Combine(DaggerfallUnity.Instance.Arena2Path, "FMAP_PAL.COL")))
+                throw new Exception("DaggerfallTravelMap: Could not load color palette.");
+
+            // Populate Location Pixel Color Values
+            locationPixelColors = new Color32[]
+            {
+                new Color32(colors.GetRed(237), colors.GetGreen(237), colors.GetBlue(237), 255),  //dunglab (R215, G119, B39)
+                new Color32(colors.GetRed(240), colors.GetGreen(240), colors.GetBlue(240), 255),  //dungkeep (R191, G87, B27)
+                new Color32(colors.GetRed(243), colors.GetGreen(243), colors.GetBlue(243), 255),  //dungruin (R171, G51, B15)
+                new Color32(colors.GetRed(246), colors.GetGreen(246), colors.GetBlue(246), 255),  //graveyards (R147, G15, B7)
+                new Color32(colors.GetRed(0), colors.GetGreen(0), colors.GetBlue(0), 255),        //coven (R15, G15, B15)
+                new Color32(colors.GetRed(53), colors.GetGreen(53), colors.GetBlue(53), 255),     //farms (R165, G100, B70)
+                new Color32(colors.GetRed(51), colors.GetGreen(51), colors.GetBlue(51), 255),     //wealthy (R193, G133, B100)
+                new Color32(colors.GetRed(55), colors.GetGreen(55), colors.GetBlue(55), 255),     //poor (R140, G86, B55)
+                new Color32(colors.GetRed(96), colors.GetGreen(96), colors.GetBlue(96), 255),     //temple (R176, G205, B255)
+                new Color32(colors.GetRed(101), colors.GetGreen(101), colors.GetBlue(101), 255),  //cult (R68, G124, B192)
+                new Color32(colors.GetRed(39), colors.GetGreen(39), colors.GetBlue(39), 255),     //tavern (R126, G81, B89)
+                new Color32(colors.GetRed(33), colors.GetGreen(33), colors.GetBlue(33), 255),     //city (R220, G177, B177)
+                new Color32(colors.GetRed(35), colors.GetGreen(35), colors.GetBlue(35), 255),     //hamlet (R188, G138, B138)
+                new Color32(colors.GetRed(37), colors.GetGreen(37), colors.GetBlue(37), 255),     //village (R155, G105, B106)
+            };
 
             // Load textures
             LoadTextures();
@@ -488,15 +515,11 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
         {
             Array.Clear(locationDotPixelBuffer, 0, locationDotPixelBuffer.Length);
 
-            /*Vector2 origin = offsetLookup["FMAP0I59.IMG"];
-            int regionIndex = 59;
-            int originX = (int)origin.x;
-            int originY = (int)origin.y;*/
             int width = 1000;
             int height = 500;
 
             // Plot locations to color array
-            float scale = 1.0f;
+            /*float scale = 1.0f;
             for (int y = 0; y < height; y++)
             {
                 for (int x = 0; x < width; x++)
@@ -510,40 +533,33 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
                         locationDotPixelBuffer[offset] = redColor;
                     }
                 }
-            }
+            }*/
 
-            // Maybe tomorrow, try to get the location dots to have the "proper" color based on the location type, then may try to get color on the map texture, will see.
-
-            /*foreach (KeyValuePair<string, Vector2> entry in offsetLookup)
+            // Plot locations to color array
+            float scale = 1.0f;
+            for (int y = 0; y < height; y++)
             {
-                // Get map and dimensions
-                string mapName = entry.Key;
-                Vector2 origin = entry.Value;
-                int regionIndex = GetRegionIndexByMapName(mapName);
-                int originX = (int)origin.x;
-                int originY = (int)origin.y;
-                int width = 320;
-                int height = 160;
-
-                // Plot locations to color array
-                float scale = 1.0f;
-                scale = GetRegionMapScale(regionIndex);
-                for (int y = 0; y < height; y++)
+                for (int x = 0; x < width; x++)
                 {
-                    for (int x = 0; x < width; x++)
-                    {
-                        int offset = (int)((((height - y - 1) * width) + x) * scale);
-                        //if (offset >= (width * height))
-                            //continue;
+                    int offset = (int)((((height - y - 1) * width) + x) * scale);
+                    if (offset >= (width * height))
+                        continue;
 
-                        ContentReader.MapSummary summary;
-                        if (DaggerfallUnity.Instance.ContentReader.HasLocation(originX + x, originY + y, out summary))
+                    ContentReader.MapSummary summary;
+                    if (DaggerfallUnity.Instance.ContentReader.HasLocation(x, y, out summary))
+                    {
+                        int index = GetPixelColorIndex(summary.LocationType);
+                        if (index == -1)
+                            continue;
+                        else
                         {
-                            locationDotPixelBuffer[offset] = redColor;
+                            locationDotPixelBuffer[offset] = locationPixelColors[index];
                         }
                     }
                 }
-            }*/
+            }
+
+            // Maybe tomorrow, try to get the location dots to have the "proper" color based on the location type, then may try to get color on the map texture, will see.
 
             // Apply updated color array to texture
             locationDotTexture.SetPixels32(locationDotPixelBuffer);
@@ -551,21 +567,6 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
 
             // Present texture
             locationDotOverlayPanel.BackgroundTexture = locationDotTexture;
-
-            // Plot locations to color array
-            /*for (int y = 0; y < height; y++)
-            {
-                for (int x = 0; x < width; x++)
-                {
-                    ContentReader.MapSummary summary;
-                    if (DaggerfallUnity.ContentReader.HasLocation(x, y, out summary))
-                    {
-                        int flippedY = (int)(height - y - 1); // To compensate for the pixelBuffer index starting at the opposite part of the screen as the (0, 0) origin for the screen.
-                        int index = (int)(flippedY * width + x);
-                        locationDotPixelBuffer[index * 16] = redColor;
-                    }
-                }
-            }*/
         }
 
         void TestWherePixelBufferIsLocated(int clickedSpot)
@@ -635,6 +636,72 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             pixelBuffer[pixelPos + 1] = whiteColor;
             pixelBuffer[pixelPos + width] = whiteColor;
             pixelBuffer[pixelPos + width + 1] = whiteColor;
+        }
+
+        // Get index to locationPixelColor array or -1 if invalid or filtered
+        int GetPixelColorIndex(DFRegion.LocationTypes locationType)
+        {
+            int index = -1;
+            switch (locationType)
+            {
+                case DFRegion.LocationTypes.DungeonLabyrinth:
+                    index = 0;
+                    break;
+                case DFRegion.LocationTypes.DungeonKeep:
+                    index = 1;
+                    break;
+                case DFRegion.LocationTypes.DungeonRuin:
+                    index = 2;
+                    break;
+                case DFRegion.LocationTypes.Graveyard:
+                    index = 3;
+                    break;
+                case DFRegion.LocationTypes.Coven:
+                    index = 4;
+                    break;
+                case DFRegion.LocationTypes.HomeFarms:
+                    index = 5;
+                    break;
+                case DFRegion.LocationTypes.HomeWealthy:
+                    index = 6;
+                    break;
+                case DFRegion.LocationTypes.HomePoor:
+                    index = 7;
+                    break;
+                case DFRegion.LocationTypes.HomeYourShips:
+                    break;
+                case DFRegion.LocationTypes.ReligionTemple:
+                    index = 8;
+                    break;
+                case DFRegion.LocationTypes.ReligionCult:
+                    index = 9;
+                    break;
+                case DFRegion.LocationTypes.Tavern:
+                    index = 10;
+                    break;
+                case DFRegion.LocationTypes.TownCity:
+                    index = 11;
+                    break;
+                case DFRegion.LocationTypes.TownHamlet:
+                    index = 12;
+                    break;
+                case DFRegion.LocationTypes.TownVillage:
+                    index = 13;
+                    break;
+                default:
+                    break;
+            }
+            /*if (index < 0)
+                return index;
+            else if (index < 5 && filterDungeons)
+                index = -1;
+            else if (index > 4 && index < 8 && filterHomes)
+                index = -1;
+            else if (index > 7 && index < 10 && filterTemples)
+                index = -1;
+            else if (index > 9 && index < 14 && filterTowns)
+                index = -1;*/
+            return index;
         }
 
         int GetRegionIndexByMapName(string mapName)

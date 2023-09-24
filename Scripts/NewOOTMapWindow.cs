@@ -1,16 +1,15 @@
 using UnityEngine;
 using DaggerfallWorkshop.Utility;
 using DaggerfallWorkshop.Game.UserInterface;
-using LockedLootContainers;
 using DaggerfallWorkshop.Game.Entity;
-using DaggerfallWorkshop.Game.Items;
-using DaggerfallWorkshop.Game.Serialization;
 using OverhauledOverworldTravel;
 using System;
 using System.Collections.Generic;
 using DaggerfallConnect;
 using DaggerfallWorkshop.Utility.AssetInjection;
 using System.IO;
+using DaggerfallConnect.Arena2;
+using System.Linq;
 
 namespace DaggerfallWorkshop.Game.UserInterfaceWindows
 {
@@ -126,6 +125,8 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
                 new Color32(colors.GetRed(35), colors.GetGreen(35), colors.GetBlue(35), 255),     //hamlet (R188, G138, B138)
                 new Color32(colors.GetRed(37), colors.GetGreen(37), colors.GetBlue(37), 255),     //village (R155, G105, B106)
             };
+
+            // Tomorrow maybe I should try to get that togglable visual borders thing to be a thing. Hopefully won't be too much of a challenge after actually "drawing" the border overlap, etc.
 
             // Load textures
             LoadTextures();
@@ -328,9 +329,9 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             Vector2 testingScaledMousePos = new Vector2(currentMousePos.x, currentMousePos.y);
             Vector2 testingMousePos = new Vector2(testingZoomMousePos.x, testingZoomMousePos.y);
 
-            firstDebugLabel.Text = string.Format("ScaledMousePos: ({0}, {1})", testingScaledMousePos.x, testingScaledMousePos.y);
-            secondDebugLabel.Text = string.Format("ZoomedMousePos: ({0}, {1})", testingMousePos.x, testingMousePos.y);
-            thirdDebugLabel.Text = string.Format("Magnification: {0}x", currentZoom);
+            //firstDebugLabel.Text = string.Format("ScaledMousePos: ({0}, {1})", testingScaledMousePos.x, testingScaledMousePos.y);
+            //secondDebugLabel.Text = string.Format("ZoomedMousePos: ({0}, {1})", testingMousePos.x, testingMousePos.y);
+            //thirdDebugLabel.Text = string.Format("Magnification: {0}x", currentZoom);
 
             int usedPosX = (int)((currentMousePos.x + (zoomOffset.x * currentZoom)) / currentZoom);
             int usedPosY = (int)((currentMousePos.y + (zoomOffset.y * currentZoom)) / currentZoom);
@@ -350,7 +351,7 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             }
             else
             {
-                regionLabel.Text = string.Format("{0} : {1} ({2})", regionName, locationName, mapPixelID);
+                //regionLabel.Text = string.Format("{0} : {1} ({2})", regionName, locationName, mapPixelID);
             }
         }
 
@@ -559,8 +560,6 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
                 }
             }
 
-            // Maybe tomorrow, try to get the location dots to have the "proper" color based on the location type, then may try to get color on the map texture, will see.
-
             // Apply updated color array to texture
             locationDotTexture.SetPixels32(locationDotPixelBuffer);
             locationDotTexture.Apply();
@@ -605,11 +604,13 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
 
         void DrawClickedSpotCursor(int pixelPos, int width, ref Color32[] pixelBuffer) // Right now assuming 4x4 "pixel" size or 16 area, will need to consider other resolution values later.
         {
+            /*
             for (int i = -3; i < 3; i++) { pixelBuffer[pixelPos + i] = whiteColor; }
             for (int i = -3; i < 3; i++) { pixelBuffer[pixelPos - width + i] = whiteColor; }
 
             for (int i = -3; i < 3; i++) { pixelBuffer[pixelPos + (width * i)] = whiteColor; }
             for (int i = -3; i < 3; i++) { pixelBuffer[pixelPos + (width * i) - 1] = whiteColor; }
+            */
         }
 
         void TestWhereMouseCursorHitboxIsLocated(int hitboxCenter)
@@ -632,10 +633,12 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
 
         void DrawMouseCursorHitboxArea(int pixelPos, int width, ref Color32[] pixelBuffer) // Right now assuming 2x2 "pixel" size or 4 area, will need to consider other resolution values later.
         {
+            /*
             pixelBuffer[pixelPos] = whiteColor;
             pixelBuffer[pixelPos + 1] = whiteColor;
             pixelBuffer[pixelPos + width] = whiteColor;
             pixelBuffer[pixelPos + width + 1] = whiteColor;
+            */
         }
 
         // Get index to locationPixelColor array or -1 if invalid or filtered
@@ -1001,6 +1004,300 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
         private void ExitButton_OnMouseClick(BaseScreenComponent sender, Vector2 position)
         {
             CloseWindow();
+        }
+
+        void VariousUsefulNotesAndMethods()
+        {
+            /*
+            // Interkarma's Height Map To Image Extraction Code
+            DFPalette colors = new DFPalette();
+            if (!colors.Load(Path.Combine(DaggerfallUnity.Instance.Arena2Path, "FMAP_PAL.COL")))
+                throw new Exception("DaggerfallTravelMap: Could not load color palette.");
+            */
+
+            /*
+            // Start Stuff Here
+            PakFile climateFile = new PakFile(@"c:\games\daggerfall\arena2\climate.pak");
+            WoodsFile woodsFile = new WoodsFile(@"c:\games\daggerfall\arena2\woods.wld", FileUsage.UseMemory, true);
+            byte[] climateData = climateFile.Buffer;
+            byte[] heightData = woodsFile.Buffer;
+            Color32[] combinedColorMap = new Color32[climateData.Length];
+
+            for (int y = 0; y < 500; y++) // Process raw height data into something more visible to humans
+            {
+                for (int x = 0; x < 1001; x++)
+                {
+                    //byte h = heightData[y * 1000 + x];
+                    byte h = 0; if (x >= 1000) { h = 255; } else { h = heightData[y * 1000 + x]; }
+                    byte k = climateData[y * 1001 + x];
+                    Color32 c = new Color32(255, 255, 255, 255);
+                    int cIn = 0;
+                    if (h <= 2) { c = new Color32(colors.GetRed(255), colors.GetGreen(255), colors.GetBlue(255), 255); }
+                    else
+                    {
+                        switch (k)
+                        {
+                            case 223: // Ocean/Water
+                                c = new Color32(colors.GetRed(255), colors.GetGreen(255), colors.GetBlue(255), 255); break;
+                            case 224: // Desert South
+                                if (h >= 4 && h <= 11) { cIn = 150; c = new Color32(colors.GetRed(cIn), colors.GetGreen(cIn), colors.GetBlue(cIn), 255); }
+                                else if (h >= 12 && h <= 16) { cIn = 149; c = new Color32(colors.GetRed(cIn), colors.GetGreen(cIn), colors.GetBlue(cIn), 255); }
+                                else if (h >= 17 && h <= 22) { cIn = 148; c = new Color32(colors.GetRed(cIn), colors.GetGreen(cIn), colors.GetBlue(cIn), 255); }
+                                else if (h >= 24 && h <= 27) { cIn = 147; c = new Color32(colors.GetRed(cIn), colors.GetGreen(cIn), colors.GetBlue(cIn), 255); }
+                                else if (h >= 29 && h <= 57) { cIn = 146; c = new Color32(colors.GetRed(cIn), colors.GetGreen(cIn), colors.GetBlue(cIn), 255); }
+                                else { c = new Color32(colors.GetRed(cIn), colors.GetGreen(cIn), colors.GetBlue(cIn), 255); } break;
+                            case 225: // Hot Desert South-East
+                                if (h >= 4 && h <= 11) { cIn = 157; c = new Color32(colors.GetRed(cIn), colors.GetGreen(cIn), colors.GetBlue(cIn), 255); }
+                                else if (h >= 12 && h <= 16) { cIn = 156; c = new Color32(colors.GetRed(cIn), colors.GetGreen(cIn), colors.GetBlue(cIn), 255); }
+                                else if (h >= 17 && h <= 22) { cIn = 155; c = new Color32(colors.GetRed(cIn), colors.GetGreen(cIn), colors.GetBlue(cIn), 255); }
+                                else if (h >= 24 && h <= 27) { cIn = 154; c = new Color32(colors.GetRed(cIn), colors.GetGreen(cIn), colors.GetBlue(cIn), 255); }
+                                else if (h >= 29 && h <= 57) { cIn = 153; c = new Color32(colors.GetRed(cIn), colors.GetGreen(cIn), colors.GetBlue(cIn), 255); }
+                                else { c = new Color32(colors.GetRed(cIn), colors.GetGreen(cIn), colors.GetBlue(cIn), 255); } break;
+                            case 226: // Mountains
+                                if (h >= 4 && h <= 22) { cIn = 123; c = new Color32(colors.GetRed(cIn), colors.GetGreen(cIn), colors.GetBlue(cIn), 255); }
+                                else if (h >= 24 && h <= 27) { cIn = 122; c = new Color32(colors.GetRed(cIn), colors.GetGreen(cIn), colors.GetBlue(cIn), 255); }
+                                else if (h >= 29 && h <= 34) { cIn = 121; c = new Color32(colors.GetRed(cIn), colors.GetGreen(cIn), colors.GetBlue(cIn), 255); }
+                                else if (h >= 35 && h <= 40) { cIn = 120; c = new Color32(colors.GetRed(cIn), colors.GetGreen(cIn), colors.GetBlue(cIn), 255); }
+                                else if (h >= 42 && h <= 49) { cIn = 119; c = new Color32(colors.GetRed(cIn), colors.GetGreen(cIn), colors.GetBlue(cIn), 255); }
+                                else if (h >= 50 && h <= 57) { cIn = 118; c = new Color32(colors.GetRed(cIn), colors.GetGreen(cIn), colors.GetBlue(cIn), 255); }
+                                else if (h >= 59 && h <= 65) { cIn = 117; c = new Color32(colors.GetRed(cIn), colors.GetGreen(cIn), colors.GetBlue(cIn), 255); }
+                                else if (h >= 67 && h <= 72) { cIn = 116; c = new Color32(colors.GetRed(cIn), colors.GetGreen(cIn), colors.GetBlue(cIn), 255); }
+                                else if (h >= 74 && h <= 80) { cIn = 115; c = new Color32(colors.GetRed(cIn), colors.GetGreen(cIn), colors.GetBlue(cIn), 255); }
+                                else if (h >= 82 && h <= 92) { cIn = 114; c = new Color32(colors.GetRed(cIn), colors.GetGreen(cIn), colors.GetBlue(cIn), 255); }
+                                else if (h >= 94 && h <= 100) { cIn = 113; c = new Color32(colors.GetRed(cIn), colors.GetGreen(cIn), colors.GetBlue(cIn), 255); }
+                                else if (h >= 102 && h <= 109) { cIn = 112; c = new Color32(colors.GetRed(cIn), colors.GetGreen(cIn), colors.GetBlue(cIn), 255); }
+                                else { c = new Color32(colors.GetRed(cIn), colors.GetGreen(cIn), colors.GetBlue(cIn), 255); } break;
+                            case 227: // Rainforest
+                                if (h >= 4 && h <= 16) { cIn = 182; c = new Color32(colors.GetRed(cIn), colors.GetGreen(cIn), colors.GetBlue(cIn), 255); }
+                                else if (h >= 17 && h <= 22) { cIn = 184; c = new Color32(colors.GetRed(cIn), colors.GetGreen(cIn), colors.GetBlue(cIn), 255); }
+                                else if (h >= 24 && h <= 27) { cIn = 186; c = new Color32(colors.GetRed(cIn), colors.GetGreen(cIn), colors.GetBlue(cIn), 255); }
+                                else if (h >= 29 && h <= 255) { cIn = 187; c = new Color32(colors.GetRed(cIn), colors.GetGreen(cIn), colors.GetBlue(cIn), 255); }
+                                else { c = new Color32(colors.GetRed(cIn), colors.GetGreen(cIn), colors.GetBlue(cIn), 255); } break;
+                            case 228: // Swamp
+                                if (h >= 4 && h <= 11) { cIn = 138; c = new Color32(colors.GetRed(cIn), colors.GetGreen(cIn), colors.GetBlue(cIn), 255); }
+                                else if (h >= 12 && h <= 16) { cIn = 137; c = new Color32(colors.GetRed(cIn), colors.GetGreen(cIn), colors.GetBlue(cIn), 255); }
+                                else if (h >= 17 && h <= 22) { cIn = 136; c = new Color32(colors.GetRed(cIn), colors.GetGreen(cIn), colors.GetBlue(cIn), 255); }
+                                else if (h >= 24 && h <= 27) { cIn = 135; c = new Color32(colors.GetRed(cIn), colors.GetGreen(cIn), colors.GetBlue(cIn), 255); }
+                                else if (h >= 29 && h <= 34) { cIn = 134; c = new Color32(colors.GetRed(cIn), colors.GetGreen(cIn), colors.GetBlue(cIn), 255); }
+                                else if (h >= 35 && h <= 40) { cIn = 133; c = new Color32(colors.GetRed(cIn), colors.GetGreen(cIn), colors.GetBlue(cIn), 255); }
+                                else if (h >= 42 && h <= 57) { cIn = 132; c = new Color32(colors.GetRed(cIn), colors.GetGreen(cIn), colors.GetBlue(cIn), 255); }
+                                else if (h >= 255) { cIn = 129; c = new Color32(colors.GetRed(cIn), colors.GetGreen(cIn), colors.GetBlue(cIn), 255); }
+                                else { c = new Color32(colors.GetRed(cIn), colors.GetGreen(cIn), colors.GetBlue(cIn), 255); } break;
+                            case 229: // Sub Tropical
+                                if (h >= 4 && h <= 11) { cIn = 201; c = new Color32(colors.GetRed(cIn), colors.GetGreen(cIn), colors.GetBlue(cIn), 255); }
+                                else if (h >= 12 && h <= 16) { cIn = 200; c = new Color32(colors.GetRed(cIn), colors.GetGreen(cIn), colors.GetBlue(cIn), 255); }
+                                else if (h >= 17 && h <= 22) { cIn = 199; c = new Color32(colors.GetRed(cIn), colors.GetGreen(cIn), colors.GetBlue(cIn), 255); }
+                                else if (h >= 24 && h <= 27) { cIn = 198; c = new Color32(colors.GetRed(cIn), colors.GetGreen(cIn), colors.GetBlue(cIn), 255); }
+                                else if (h >= 29 && h <= 57) { cIn = 197; c = new Color32(colors.GetRed(cIn), colors.GetGreen(cIn), colors.GetBlue(cIn), 255); }
+                                else { c = new Color32(colors.GetRed(cIn), colors.GetGreen(cIn), colors.GetBlue(cIn), 255); } break;
+                            case 230: // Woodland Hills
+                                if (h >= 4 && h <= 22) { cIn = 171; c = new Color32(colors.GetRed(cIn), colors.GetGreen(cIn), colors.GetBlue(cIn), 255); }
+                                else if (h >= 24 && h <= 27) { cIn = 170; c = new Color32(colors.GetRed(cIn), colors.GetGreen(cIn), colors.GetBlue(cIn), 255); }
+                                else if (h >= 29 && h <= 34) { cIn = 169; c = new Color32(colors.GetRed(cIn), colors.GetGreen(cIn), colors.GetBlue(cIn), 255); }
+                                else if (h >= 35 && h <= 40) { cIn = 168; c = new Color32(colors.GetRed(cIn), colors.GetGreen(cIn), colors.GetBlue(cIn), 255); }
+                                else if (h >= 42 && h <= 49) { cIn = 167; c = new Color32(colors.GetRed(cIn), colors.GetGreen(cIn), colors.GetBlue(cIn), 255); }
+                                else if (h >= 50 && h <= 57) { cIn = 166; c = new Color32(colors.GetRed(cIn), colors.GetGreen(cIn), colors.GetBlue(cIn), 255); }
+                                else if (h >= 59 && h <= 65) { cIn = 165; c = new Color32(colors.GetRed(cIn), colors.GetGreen(cIn), colors.GetBlue(cIn), 255); }
+                                else if (h >= 67 && h <= 72) { cIn = 164; c = new Color32(colors.GetRed(cIn), colors.GetGreen(cIn), colors.GetBlue(cIn), 255); }
+                                else if (h >= 74 && h <= 80) { cIn = 163; c = new Color32(colors.GetRed(cIn), colors.GetGreen(cIn), colors.GetBlue(cIn), 255); }
+                                else if (h >= 82 && h <= 92) { cIn = 162; c = new Color32(colors.GetRed(cIn), colors.GetGreen(cIn), colors.GetBlue(cIn), 255); }
+                                else if (h >= 94 && h <= 100) { cIn = 161; c = new Color32(colors.GetRed(cIn), colors.GetGreen(cIn), colors.GetBlue(cIn), 255); }
+                                else if (h >= 102 && h <= 109) { cIn = 160; c = new Color32(colors.GetRed(cIn), colors.GetGreen(cIn), colors.GetBlue(cIn), 255); }
+                                else { c = new Color32(colors.GetRed(cIn), colors.GetGreen(cIn), colors.GetBlue(cIn), 255); } break;
+                            case 231: // Temperate Woodland
+                                if (h >= 4 && h <= 22) { cIn = 208; c = new Color32(colors.GetRed(cIn), colors.GetGreen(cIn), colors.GetBlue(cIn), 255); }
+                                else if (h >= 24 && h <= 27) { cIn = 209; c = new Color32(colors.GetRed(cIn), colors.GetGreen(cIn), colors.GetBlue(cIn), 255); }
+                                else if (h >= 29 && h <= 34) { cIn = 210; c = new Color32(colors.GetRed(cIn), colors.GetGreen(cIn), colors.GetBlue(cIn), 255); }
+                                else if (h >= 35 && h <= 40) { cIn = 211; c = new Color32(colors.GetRed(cIn), colors.GetGreen(cIn), colors.GetBlue(cIn), 255); }
+                                else if (h >= 42 && h <= 49) { cIn = 212; c = new Color32(colors.GetRed(cIn), colors.GetGreen(cIn), colors.GetBlue(cIn), 255); }
+                                else if (h >= 50 && h <= 57) { cIn = 213; c = new Color32(colors.GetRed(cIn), colors.GetGreen(cIn), colors.GetBlue(cIn), 255); }
+                                else if (h >= 59 && h <= 65) { cIn = 214; c = new Color32(colors.GetRed(cIn), colors.GetGreen(cIn), colors.GetBlue(cIn), 255); }
+                                else if (h >= 67 && h <= 72) { cIn = 215; c = new Color32(colors.GetRed(cIn), colors.GetGreen(cIn), colors.GetBlue(cIn), 255); }
+                                else if (h >= 74 && h <= 80) { cIn = 236; c = new Color32(colors.GetRed(cIn), colors.GetGreen(cIn), colors.GetBlue(cIn), 255); }
+                                else if (h >= 82 && h <= 92) { cIn = 235; c = new Color32(colors.GetRed(cIn), colors.GetGreen(cIn), colors.GetBlue(cIn), 255); }
+                                else if (h >= 94 && h <= 100) { cIn = 234; c = new Color32(colors.GetRed(cIn), colors.GetGreen(cIn), colors.GetBlue(cIn), 255); }
+                                else if (h >= 102 && h <= 109) { cIn = 233; c = new Color32(colors.GetRed(cIn), colors.GetGreen(cIn), colors.GetBlue(cIn), 255); }
+                                else { c = new Color32(colors.GetRed(cIn), colors.GetGreen(cIn), colors.GetBlue(cIn), 255); } break;
+                            case 232: // Haunted Woodland
+                                if (h >= 4 && h <= 27) { cIn = 139; c = new Color32(colors.GetRed(cIn), colors.GetGreen(cIn), colors.GetBlue(cIn), 255); }
+                                else if (h >= 29 && h <= 34) { cIn = 138; c = new Color32(colors.GetRed(cIn), colors.GetGreen(cIn), colors.GetBlue(cIn), 255); }
+                                else if (h >= 35 && h <= 40) { cIn = 137; c = new Color32(colors.GetRed(cIn), colors.GetGreen(cIn), colors.GetBlue(cIn), 255); }
+                                else if (h >= 42 && h <= 49) { cIn = 136; c = new Color32(colors.GetRed(cIn), colors.GetGreen(cIn), colors.GetBlue(cIn), 255); }
+                                else if (h >= 50 && h <= 57) { cIn = 135; c = new Color32(colors.GetRed(cIn), colors.GetGreen(cIn), colors.GetBlue(cIn), 255); }
+                                else if (h >= 59 && h <= 65) { cIn = 134; c = new Color32(colors.GetRed(cIn), colors.GetGreen(cIn), colors.GetBlue(cIn), 255); }
+                                else if (h >= 67 && h <= 72) { cIn = 133; c = new Color32(colors.GetRed(cIn), colors.GetGreen(cIn), colors.GetBlue(cIn), 255); }
+                                else if (h >= 74 && h <= 80) { cIn = 132; c = new Color32(colors.GetRed(cIn), colors.GetGreen(cIn), colors.GetBlue(cIn), 255); }
+                                else if (h >= 82 && h <= 92) { cIn = 131; c = new Color32(colors.GetRed(cIn), colors.GetGreen(cIn), colors.GetBlue(cIn), 255); }
+                                else if (h >= 94 && h <= 109) { cIn = 130; c = new Color32(colors.GetRed(cIn), colors.GetGreen(cIn), colors.GetBlue(cIn), 255); }
+                                else { c = new Color32(colors.GetRed(cIn), colors.GetGreen(cIn), colors.GetBlue(cIn), 255); } break;
+                            default:
+                                c = new Color32(255, 255, 255, 255); break;
+                        }
+                    }
+                    combinedColorMap[(499 - y) * 1001 + x] = c; // Texture needs to be flipped vertically to be right way up
+                }
+            }
+
+            Texture2D combinedTextureMap = new Texture2D(1001, 500);
+            combinedTextureMap.SetPixels32(combinedColorMap);
+            combinedTextureMap.Apply();
+            byte[] climatePngData = combinedTextureMap.EncodeToPNG();
+            System.IO.File.WriteAllBytes(@"c:\dfutesting\combinedmapcolor.png", climatePngData);
+            // End Stuff Here
+            */
+
+            /*
+            PakFile climateFile = new PakFile(@"c:\games\daggerfall\arena2\climate.pak");
+            byte[] climateData = climateFile.Buffer;
+            Color32[] climateColorMap = new Color32[climateData.Length];
+            for (int y = 0; y < 500; y++) // Process raw height data into something more visible to humans
+            {
+                for (int x = 0; x < 1001; x++)
+                {
+                    byte h = climateData[y * 1001 + x];
+                    Color32 c = new Color32(255, 255, 255, 255);
+                    if (h == 223)
+                        c = new Color32(colors.GetRed(255), colors.GetGreen(255), colors.GetBlue(255), 255);
+                    else if (h == 224)
+                        c = new Color32(colors.GetRed(153), colors.GetGreen(153), colors.GetBlue(153), 255);
+                    else if (h == 225)
+                        c = new Color32(colors.GetRed(148), colors.GetGreen(148), colors.GetBlue(148), 255);
+                    else if (h == 226)
+                        c = new Color32(colors.GetRed(116), colors.GetGreen(116), colors.GetBlue(116), 255);
+                    else if (h == 227)
+                        c = new Color32(colors.GetRed(186), colors.GetGreen(186), colors.GetBlue(186), 255);
+                    else if (h == 228)
+                        c = new Color32(colors.GetRed(137), colors.GetGreen(137), colors.GetBlue(137), 255);
+                    else if (h == 229)
+                        c = new Color32(colors.GetRed(171), colors.GetGreen(171), colors.GetBlue(171), 255);
+                    else if (h == 230)
+                        c = new Color32(colors.GetRed(200), colors.GetGreen(200), colors.GetBlue(200), 255);
+                    else if (h == 231)
+                        c = new Color32(colors.GetRed(236), colors.GetGreen(236), colors.GetBlue(236), 255);
+                    else if (h == 232)
+                        c = new Color32(colors.GetRed(89), colors.GetGreen(89), colors.GetBlue(89), 255);
+                    else
+                        c = new Color32(h, h, h, 255);
+                    climateColorMap[(499 - y) * 1001 + x] = c; // Texture needs to be flipped vertically to be right way up
+                }
+            }
+            Texture2D climateTextureMap = new Texture2D(1001, 500);
+            climateTextureMap.SetPixels32(climateColorMap);
+            climateTextureMap.Apply();
+            byte[] climatePngData = climateTextureMap.EncodeToPNG();
+            System.IO.File.WriteAllBytes(@"c:\dfutesting\climatemapcolor.png", climatePngData);
+
+            WoodsFile woodsFile = new WoodsFile(@"c:\games\daggerfall\arena2\woods.wld", FileUsage.UseMemory, true);
+            byte[] heightData = woodsFile.Buffer;
+            Color32[] colorMap = new Color32[heightData.Length];
+            for (int y = 0; y < 500; y++) // Process raw height data into something more visible to humans
+            {
+                for (int x = 0; x < 1000; x++)
+                {
+                    byte h = heightData[y * 1000 + x];
+                    Color32 c = new Color32(255, 255, 255, 255);
+                    if (h <= 2)
+                        c = new Color32(colors.GetRed(255), colors.GetGreen(255), colors.GetBlue(255), 255);
+                    else if (h >= 4 && h <= 11)
+                        c = new Color32(colors.GetRed(182), colors.GetGreen(182), colors.GetBlue(182), 255);
+                    else if (h >= 12 && h <= 16)
+                        c = new Color32(colors.GetRed(185), colors.GetGreen(185), colors.GetBlue(185), 255);
+                    else if (h >= 17 && h <= 22)
+                        c = new Color32(colors.GetRed(187), colors.GetGreen(187), colors.GetBlue(187), 255);
+                    else if (h >= 24 && h <= 27)
+                        c = new Color32(colors.GetRed(188), colors.GetGreen(188), colors.GetBlue(188), 255);
+                    else if (h >= 29 && h <= 34)
+                        c = new Color32(colors.GetRed(189), colors.GetGreen(189), colors.GetBlue(189), 255);
+                    else if (h >= 35 && h <= 40)
+                        c = new Color32(colors.GetRed(190), colors.GetGreen(190), colors.GetBlue(190), 255);
+                    else if (h >= 42 && h <= 49)
+                        c = new Color32(colors.GetRed(191), colors.GetGreen(191), colors.GetBlue(191), 255);
+                    else if (h >= 50 && h <= 57)
+                        c = new Color32(colors.GetRed(208), colors.GetGreen(208), colors.GetBlue(208), 255);
+                    else if (h >= 59 && h <= 65)
+                        c = new Color32(colors.GetRed(209), colors.GetGreen(209), colors.GetBlue(209), 255);
+                    else if (h >= 67 && h <= 72)
+                        c = new Color32(colors.GetRed(210), colors.GetGreen(210), colors.GetBlue(210), 255);
+                    else if (h >= 74 && h <= 80)
+                        c = new Color32(colors.GetRed(211), colors.GetGreen(211), colors.GetBlue(211), 255);
+                    else if (h >= 82 && h <= 92)
+                        c = new Color32(colors.GetRed(212), colors.GetGreen(212), colors.GetBlue(212), 255);
+                    else if (h >= 94 && h <= 100)
+                        c = new Color32(colors.GetRed(213), colors.GetGreen(213), colors.GetBlue(213), 255);
+                    else if (h >= 102 && h <= 109)
+                        c = new Color32(colors.GetRed(214), colors.GetGreen(214), colors.GetBlue(214), 255);
+                    else if (h >= 255)
+                        c = new Color32(colors.GetRed(215), colors.GetGreen(215), colors.GetBlue(215), 255);
+                    else
+                        c = new Color32(h, h, h, 255);
+                    colorMap[(499 - y) * 1000 + x] = c; // Texture needs to be flipped vertically to be right way up
+                }
+            }
+
+            List<Color32> fmapColors = new List<Color32>();
+            for (int i = 0; i < 256; i++)
+            {
+                fmapColors.Add(new Color32(colors.GetRed(i), colors.GetGreen(i), colors.GetBlue(i), 255));
+            }
+
+            string colorFilePath = @"c:\dfutesting\fmapColors.txt";
+
+            using (StreamWriter writer = new StreamWriter(colorFilePath))
+            {
+                writer.WriteLine("Index, Red, Green, Blue");
+                for (int k = 0; k < fmapColors.Count; k++)
+                {
+                    writer.WriteLine($"{k}, {fmapColors[k].r}, {fmapColors[k].g}, {fmapColors[k].b}");
+                }
+            }
+
+            Console.WriteLine($"Results have been written to {colorFilePath}");
+
+            // Counting Code
+            // Use LINQ to count unique values and their occurrences
+            var counts = climateData.GroupBy(x => x).ToDictionary(g => g.Key, g => g.Count());
+
+            // Count the number of unique values
+            int uniqueCount = counts.Count;
+
+            // Calculate the total count of all values
+            int totalCount = climateData.Length;
+
+            // Calculate and order the percentage distribution
+            var distribution = counts.OrderBy(kvp => kvp.Key)
+                                     .Select(kvp => new
+                                     {
+                                         Value = kvp.Key,
+                                         Count = kvp.Value,
+                                         Percentage = (double)kvp.Value / totalCount * 100.0
+                                     });
+
+            // Specify the path for the output text file
+            string filePath = @"c:\dfutesting\output.txt";
+
+            // Write the results to the text file
+            using (StreamWriter writer = new StreamWriter(filePath))
+            {
+                writer.WriteLine("Value,Count,Percentage");
+                foreach (var item in distribution)
+                {
+                    writer.WriteLine($"{item.Value}, {item.Count}, {item.Percentage:F2}%");
+                }
+            }
+
+            Console.WriteLine($"Results have been written to {filePath}");
+
+            // Print the results
+            Debug.LogFormat("Number of unique values: {0}", uniqueCount);
+            // Counting Code
+
+            Texture2D textureMap = new Texture2D(1000, 500);
+            textureMap.SetPixels32(colorMap);
+            textureMap.Apply();
+            byte[] pngData = textureMap.EncodeToPNG();
+            System.IO.File.WriteAllBytes(@"c:\dfutesting\heightmapcolor.png", pngData);
+            // Interkarma's Height Map To Image Extraction Code
+            */
         }
     }
 }

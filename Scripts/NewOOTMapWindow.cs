@@ -52,8 +52,11 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
         Texture2D baseTexture;
         Texture2D backgroundTexture;
         Texture2D heightMapTexture;
+        Texture2D regionBordersTexture;
 
         Panel worldMapPanel;
+
+        Panel regionBordersOverlayPanel;
 
         Panel locationDotOverlayPanel;
         Texture2D locationDotTexture;
@@ -126,7 +129,7 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
                 new Color32(colors.GetRed(37), colors.GetGreen(37), colors.GetBlue(37), 255),     //village (R155, G105, B106)
             };
 
-            // Tomorrow maybe I should try to get that togglable visual borders thing to be a thing. Hopefully won't be too much of a challenge after actually "drawing" the border overlap, etc.
+            // Tomorrow maybe I should try to get the "mip-map" thing done, so mousing over the general area of a region will display the name of it, rather than only when over a location dot, will see.
 
             // Load textures
             LoadTextures();
@@ -158,6 +161,16 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
                 ParentPanel.Components.Add(worldMapPanel);
 
             Rect rectWorldMap = worldMapPanel.Rectangle;
+
+            // Overlay for the map region borders panel
+            regionBordersOverlayPanel = DaggerfallUI.AddPanel(rectWorldMap, worldMapPanel);
+            regionBordersOverlayPanel.HorizontalAlignment = HorizontalAlignment.Center;
+            regionBordersOverlayPanel.VerticalAlignment = VerticalAlignment.Middle;
+            regionBordersOverlayPanel.Size = new Vector2(1000, 500);
+            regionBordersOverlayPanel.AutoSize = AutoSizeModes.None;
+            regionBordersOverlayPanel.BackgroundColor = ScreenDimColor;
+            regionBordersOverlayPanel.BackgroundTexture = regionBordersTexture;
+            regionBordersOverlayPanel.Enabled = false;
 
             // Add region/location label
             regionLabel = DaggerfallUI.AddTextLabel(DaggerfallUI.LargeFont, new Vector2(0, 2), string.Empty, worldMapPanel);
@@ -209,20 +222,24 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             mouseCursorHitboxTexture = new Texture2D((int)rectWorldMap.width, (int)rectWorldMap.height, TextureFormat.ARGB32, false);
             mouseCursorHitboxTexture.filterMode = FilterMode.Point;
 
+            /*
             Panel chestPictureBox = DaggerfallUI.AddPanel(new Rect(113, 64, 30, 22), NativePanel);
             chestPictureBox.BackgroundColor = new Color(0.9f, 0.1f, 0.5f, 0.75f); // For testing purposes
             chestPictureBox.ToolTip = defaultToolTip;
             chestPictureBox.ToolTipText = "The Chest Looks";
+            */
 
             // Zoom Out Button
             Button zoomOutButton = DaggerfallUI.AddButton(new Rect(0, 0, 0, 0), worldMapPanel);
             zoomOutButton.Hotkey = new HotkeySequence(KeyCode.Semicolon, HotkeySequence.KeyModifiers.None);
 
+            /*
             // Exit Button
             Button exitButton = DaggerfallUI.AddButton(new Rect(139, 122, 43, 15), NativePanel);
             exitButton.BackgroundColor = new Color(0.9f, 0.1f, 0.5f, 0.75f); // For testing purposes
             exitButton.OnMouseClick += ExitButton_OnMouseClick;
             exitButton.ClickSound = DaggerfallUI.Instance.GetAudioClip(SoundClips.ButtonClick);
+            */
 
             //SetupChestChoiceButtons();
         }
@@ -232,6 +249,7 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             baseTexture = OOTMain.Instance.PrimaryWorldMapTexture;
             backgroundTexture = OOTMain.Instance.BackgroundMapFillerTexture;
             heightMapTexture = OOTMain.Instance.WorldHeightMapTexture;
+            regionBordersTexture = OOTMain.Instance.RegionBordersMapTexture;
         }
 
         protected void SetupChestChoiceButtons()
@@ -316,6 +334,14 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
                 // Scrolling while zoomed in
                 zoomPosition = currentMousePos;
                 ZoomMapTexture(true, false);
+            }
+
+            if (Input.GetKeyUp(KeyCode.RightBracket)) // Just temporary way to toggle region borders, plan to have a better hotkey later, as well as a proper UI button for this.
+            {
+                if (regionBordersOverlayPanel.Enabled == false)
+                    regionBordersOverlayPanel.Enabled = true;
+                else
+                    regionBordersOverlayPanel.Enabled = false;
             }
         }
 
@@ -444,6 +470,7 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             else
             {
                 worldMapPanel.BackgroundTextureLayout = BackgroundLayout.StretchToFill;
+                regionBordersOverlayPanel.BackgroundTextureLayout = BackgroundLayout.StretchToFill;
                 locationDotOverlayPanel.BackgroundTextureLayout = BackgroundLayout.StretchToFill;
                 travelPathOverlayPanel.BackgroundTextureLayout = BackgroundLayout.StretchToFill;
                 mouseCursorHitboxOverlayPanel.BackgroundTextureLayout = BackgroundLayout.StretchToFill;
@@ -504,6 +531,8 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             Rect worldMapNewRect = new Rect(startX, startY, width / zoomFactor, height / zoomFactor);
             worldMapPanel.BackgroundTextureLayout = BackgroundLayout.Cropped;
             worldMapPanel.BackgroundCroppedRect = worldMapNewRect;
+            regionBordersOverlayPanel.BackgroundTextureLayout = BackgroundLayout.Cropped;
+            regionBordersOverlayPanel.BackgroundCroppedRect = worldMapNewRect;
             locationDotOverlayPanel.BackgroundTextureLayout = BackgroundLayout.Cropped;
             locationDotOverlayPanel.BackgroundCroppedRect = worldMapNewRect;
             travelPathOverlayPanel.BackgroundTextureLayout = BackgroundLayout.Cropped;

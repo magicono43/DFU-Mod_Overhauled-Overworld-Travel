@@ -15,7 +15,8 @@
         "Assets/Game/Mods/DFU-Mod_Overhauled-Overworld-Travel/OverhauledOverworldTravel.dfmod.json",
         "Assets/Game/Mods/DFU-Mod_Overhauled-Overworld-Travel/Textures/320x200_Background_Filler.png",
         "Assets/Game/Mods/DFU-Mod_Overhauled-Overworld-Travel/Textures/1000x500_World_Height-Map.png",
-        "Assets/Game/Mods/DFU-Mod_Overhauled-Overworld-Travel/Textures/1000x500_Region_Borders_Map.png"
+        "Assets/Game/Mods/DFU-Mod_Overhauled-Overworld-Travel/Textures/1000x500_Region_Borders_Map.png",
+        "Assets/Game/Mods/DFU-Mod_Overhauled-Overworld-Travel/Textures/1000x500_Region_Bitmap_Colors.png"
     ],
     "Dependencies": []
 }

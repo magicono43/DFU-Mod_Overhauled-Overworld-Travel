@@ -53,6 +53,7 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
         Texture2D backgroundTexture;
         Texture2D heightMapTexture;
         Texture2D regionBordersTexture;
+        Texture2D regionBitmapColorsTexture;
 
         Panel worldMapPanel;
 
@@ -69,6 +70,8 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
         Panel mouseCursorHitboxOverlayPanel;
         Texture2D mouseCursorHitboxTexture;
         Color32[] mouseCursorHitboxPixelBuffer;
+
+        Color32[] regionColorsBitmap;
 
         TextLabel regionLabel;
         TextLabel firstDebugLabel;
@@ -129,7 +132,7 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
                 new Color32(colors.GetRed(37), colors.GetGreen(37), colors.GetBlue(37), 255),     //village (R155, G105, B106)
             };
 
-            // Tomorrow maybe I should try to get the "mip-map" thing done, so mousing over the general area of a region will display the name of it, rather than only when over a location dot, will see.
+            // Tomorrow maybe start working on the UI buttons and such that I have planned, where they can be expanded and collapsed with a button click, stuff like that, will see.
 
             // Load textures
             LoadTextures();
@@ -222,6 +225,9 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             mouseCursorHitboxTexture = new Texture2D((int)rectWorldMap.width, (int)rectWorldMap.height, TextureFormat.ARGB32, false);
             mouseCursorHitboxTexture.filterMode = FilterMode.Point;
 
+            // Setup Color array for determining what region the mouse cursor is currently hovering over
+            regionColorsBitmap = regionBitmapColorsTexture.GetPixels32();
+
             /*
             Panel chestPictureBox = DaggerfallUI.AddPanel(new Rect(113, 64, 30, 22), NativePanel);
             chestPictureBox.BackgroundColor = new Color(0.9f, 0.1f, 0.5f, 0.75f); // For testing purposes
@@ -250,6 +256,7 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             backgroundTexture = OOTMain.Instance.BackgroundMapFillerTexture;
             heightMapTexture = OOTMain.Instance.WorldHeightMapTexture;
             regionBordersTexture = OOTMain.Instance.RegionBordersMapTexture;
+            regionBitmapColorsTexture = OOTMain.Instance.RegionBitmapColorTexture;
         }
 
         protected void SetupChestChoiceButtons()
@@ -371,13 +378,32 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             string regionName = DaggerfallUnity.ContentReader.MapFileReader.GetRegionName(mapSummary.RegionIndex);
             string locationName = GetLocationNameInCurrentRegion(mapSummary.RegionIndex, mapSummary.MapIndex);
             int mapPixelID = mapSummary.ID;
-            if (locationName == string.Empty) // Keep label from showing up if no valid location is moused over.
+            if (locationName == string.Empty) // Keep label from showing up if no valid location is moused over. But do show region name if over a valid region Bitmap color value.
             {
-                regionLabel.Text = string.Empty;
+                int regionColorIndex = -1;
+                int flippedY = (int)(500 - usedPosY - 1); // To compensate for the pixelBuffer index starting at the opposite part of the screen as the (0, 0) origin for the screen.
+                int bitMapPos = (int)(flippedY * 1000 + usedPosX);
+
+                // Read from the "Red" color value for this part of the Bitmap texture color data to determine what region index value is used.
+                if (regionColorsBitmap[bitMapPos].r > 0) { regionColorIndex = regionColorsBitmap[bitMapPos].r - 1; }
+                else if (regionColorsBitmap[bitMapPos + 1].r > 0) { regionColorIndex = regionColorsBitmap[bitMapPos + 1].r - 1; }
+                else if (regionColorsBitmap[bitMapPos + 1000].r > 0) { regionColorIndex = regionColorsBitmap[bitMapPos + 1000].r - 1; }
+                else if (regionColorsBitmap[bitMapPos + 1000 + 1].r > 0) { regionColorIndex = regionColorsBitmap[bitMapPos + 1000 + 1].r - 1; }
+
+                // Get region from bitmap, if any
+                if ((bitMapPos >= 0 || bitMapPos < regionColorsBitmap.Length) && (regionColorIndex >= 0 || regionColorIndex < DaggerfallUnity.Instance.ContentReader.MapFileReader.RegionCount))
+                {
+                    regionName = DaggerfallUnity.ContentReader.MapFileReader.GetRegionName(regionColorIndex);
+                    regionLabel.Text = string.Format("{0}", regionName);
+                }
+                else
+                {
+                    regionLabel.Text = string.Empty;
+                }
             }
             else
             {
-                //regionLabel.Text = string.Format("{0} : {1} ({2})", regionName, locationName, mapPixelID);
+                regionLabel.Text = string.Format("{0} : {1} ({2})", regionName, locationName, mapPixelID);
             }
         }
 

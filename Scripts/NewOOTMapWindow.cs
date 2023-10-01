@@ -59,6 +59,8 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
 
         Panel regionBordersOverlayPanel;
 
+        Panel leftButtonsPanel;
+
         Panel locationDotOverlayPanel;
         Texture2D locationDotTexture;
         Color32[] locationDotPixelBuffer;
@@ -132,8 +134,6 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
                 new Color32(colors.GetRed(37), colors.GetGreen(37), colors.GetBlue(37), 255),     //village (R155, G105, B106)
             };
 
-            // Tomorrow maybe start working on the UI buttons and such that I have planned, where they can be expanded and collapsed with a button click, stuff like that, will see.
-
             // Load textures
             LoadTextures();
 
@@ -174,6 +174,37 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             regionBordersOverlayPanel.BackgroundColor = ScreenDimColor;
             regionBordersOverlayPanel.BackgroundTexture = regionBordersTexture;
             regionBordersOverlayPanel.Enabled = false;
+
+            // Panel housing the button bar on the left of the screen
+            leftButtonsPanel = DaggerfallUI.AddPanel(new Rect(0, 125, 105, 265), worldMapPanel);
+            leftButtonsPanel.BackgroundColor = new Color(0.9f, 0.1f, 0.5f, 0.75f); // For testing purposes
+
+            // Testing First UI Button in left panel
+            Button testingUIButton1 = DaggerfallUI.AddButton(new Rect(2, 3, 100, 50), leftButtonsPanel);
+            testingUIButton1.BackgroundColor = new Color(0.1f, 0.5f, 0.8f, 0.75f); // For testing purposes
+            testingUIButton1.ClickSound = DaggerfallUI.Instance.GetAudioClip(SoundClips.AnimalPig);
+
+            // Testing Second UI Button in left panel
+            Button testingUIButton2 = DaggerfallUI.AddButton(new Rect(2, 55, 100, 50), leftButtonsPanel);
+            testingUIButton2.BackgroundColor = new Color(0.1f, 0.5f, 0.8f, 0.75f); // For testing purposes
+            testingUIButton2.ClickSound = DaggerfallUI.Instance.GetAudioClip(SoundClips.AnimalCow);
+
+            // Testing Third UI Button in left panel
+            Button testingUIButton3 = DaggerfallUI.AddButton(new Rect(2, 107, 100, 50), leftButtonsPanel);
+            testingUIButton3.BackgroundColor = new Color(0.1f, 0.5f, 0.8f, 0.75f); // For testing purposes
+            testingUIButton3.ClickSound = DaggerfallUI.Instance.GetAudioClip(SoundClips.AnimalCat);
+
+            // Testing Forth UI Button in left panel
+            Button testingUIButton4 = DaggerfallUI.AddButton(new Rect(2, 159, 100, 50), leftButtonsPanel);
+            testingUIButton4.BackgroundColor = new Color(0.1f, 0.5f, 0.8f, 0.75f); // For testing purposes
+            testingUIButton4.ClickSound = DaggerfallUI.Instance.GetAudioClip(SoundClips.AnimalHorse);
+
+            // Testing Fifth UI Button in left panel
+            Button testingUIButton5 = DaggerfallUI.AddButton(new Rect(2, 211, 100, 50), leftButtonsPanel);
+            testingUIButton5.BackgroundColor = new Color(0.1f, 0.5f, 0.8f, 0.75f); // For testing purposes
+            testingUIButton5.ClickSound = DaggerfallUI.Instance.GetAudioClip(SoundClips.AnimalDog);
+
+            // Tomorrow continue working on the UI buttons and such that I have planned, where they can be expanded and collapsed with a button click, stuff like that.
 
             // Add region/location label
             regionLabel = DaggerfallUI.AddTextLabel(DaggerfallUI.LargeFont, new Vector2(0, 2), string.Empty, worldMapPanel);
@@ -238,6 +269,12 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             // Zoom Out Button
             Button zoomOutButton = DaggerfallUI.AddButton(new Rect(0, 0, 0, 0), worldMapPanel);
             zoomOutButton.Hotkey = new HotkeySequence(KeyCode.Semicolon, HotkeySequence.KeyModifiers.None);
+
+            // Toggle Left Button Panel
+            Button exitButton = DaggerfallUI.AddButton(new Rect(400, 200, 100, 50), worldMapPanel);
+            exitButton.BackgroundColor = new Color(0.1f, 0.8f, 0.4f, 0.75f); // For testing purposes
+            exitButton.OnMouseClick += ToggleLeftPanel_OnMouseClick;
+            exitButton.ClickSound = DaggerfallUI.Instance.GetAudioClip(SoundClips.AmbientCreepyBirdLaughs);
 
             /*
             // Exit Button
@@ -1059,6 +1096,14 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
         private void ExitButton_OnMouseClick(BaseScreenComponent sender, Vector2 position)
         {
             CloseWindow();
+        }
+
+        private void ToggleLeftPanel_OnMouseClick(BaseScreenComponent sender, Vector2 position)
+        {
+            if (leftButtonsPanel.Enabled == true)
+                leftButtonsPanel.Enabled = false;
+            else
+                leftButtonsPanel.Enabled = true;
         }
 
         void VariousUsefulNotesAndMethods()

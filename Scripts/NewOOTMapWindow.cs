@@ -55,6 +55,8 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
         Texture2D regionBordersTexture;
         Texture2D regionBitmapColorsTexture;
 
+        Texture2D borderButtonTexture;
+
         Panel worldMapPanel;
 
         Panel regionBordersOverlayPanel;
@@ -183,26 +185,48 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             Button testingUIButton1 = DaggerfallUI.AddButton(new Rect(2, 3, 100, 50), leftButtonsPanel);
             testingUIButton1.BackgroundColor = new Color(0.1f, 0.5f, 0.8f, 0.75f); // For testing purposes
             testingUIButton1.ClickSound = DaggerfallUI.Instance.GetAudioClip(SoundClips.AnimalPig);
+            TextLabel buttText1 = DaggerfallUI.AddTextLabel(DaggerfallUI.DefaultFont, Vector2.zero, "Button 1", testingUIButton1);
+            buttText1.VerticalAlignment = VerticalAlignment.Middle;
+            buttText1.HorizontalAlignment = HorizontalAlignment.Center;
+            buttText1.TextScale = 4.0f;
 
             // Testing Second UI Button in left panel
             Button testingUIButton2 = DaggerfallUI.AddButton(new Rect(2, 55, 100, 50), leftButtonsPanel);
             testingUIButton2.BackgroundColor = new Color(0.1f, 0.5f, 0.8f, 0.75f); // For testing purposes
             testingUIButton2.ClickSound = DaggerfallUI.Instance.GetAudioClip(SoundClips.AnimalCow);
+            TextLabel buttText2 = DaggerfallUI.AddTextLabel(DaggerfallUI.DefaultFont, Vector2.zero, "Button 2", testingUIButton2);
+            buttText2.VerticalAlignment = VerticalAlignment.Middle;
+            buttText2.HorizontalAlignment = HorizontalAlignment.Center;
+            buttText2.TextScale = 4.0f;
 
             // Testing Third UI Button in left panel
             Button testingUIButton3 = DaggerfallUI.AddButton(new Rect(2, 107, 100, 50), leftButtonsPanel);
             testingUIButton3.BackgroundColor = new Color(0.1f, 0.5f, 0.8f, 0.75f); // For testing purposes
+            //testingUIButton3.BackgroundTexture = borderButtonTexture;
+            testingUIButton3.OnMouseClick += ToggleRegionBorders_OnMouseClick;
             testingUIButton3.ClickSound = DaggerfallUI.Instance.GetAudioClip(SoundClips.AnimalCat);
+            TextLabel buttText3 = DaggerfallUI.AddTextLabel(DaggerfallUI.DefaultFont, Vector2.zero, "Borders", testingUIButton3);
+            buttText3.VerticalAlignment = VerticalAlignment.Middle;
+            buttText3.HorizontalAlignment = HorizontalAlignment.Center;
+            buttText3.TextScale = 4.0f;
 
             // Testing Forth UI Button in left panel
             Button testingUIButton4 = DaggerfallUI.AddButton(new Rect(2, 159, 100, 50), leftButtonsPanel);
             testingUIButton4.BackgroundColor = new Color(0.1f, 0.5f, 0.8f, 0.75f); // For testing purposes
             testingUIButton4.ClickSound = DaggerfallUI.Instance.GetAudioClip(SoundClips.AnimalHorse);
+            TextLabel buttText4 = DaggerfallUI.AddTextLabel(DaggerfallUI.DefaultFont, Vector2.zero, "Button 4", testingUIButton4);
+            buttText4.VerticalAlignment = VerticalAlignment.Middle;
+            buttText4.HorizontalAlignment = HorizontalAlignment.Center;
+            buttText4.TextScale = 4.0f;
 
             // Testing Fifth UI Button in left panel
             Button testingUIButton5 = DaggerfallUI.AddButton(new Rect(2, 211, 100, 50), leftButtonsPanel);
             testingUIButton5.BackgroundColor = new Color(0.1f, 0.5f, 0.8f, 0.75f); // For testing purposes
             testingUIButton5.ClickSound = DaggerfallUI.Instance.GetAudioClip(SoundClips.AnimalDog);
+            TextLabel buttText5 = DaggerfallUI.AddTextLabel(DaggerfallUI.DefaultFont, Vector2.zero, "Button 5", testingUIButton5);
+            buttText5.VerticalAlignment = VerticalAlignment.Middle;
+            buttText5.HorizontalAlignment = HorizontalAlignment.Center;
+            buttText5.TextScale = 4.0f;
 
             // Tomorrow continue working on the UI buttons and such that I have planned, where they can be expanded and collapsed with a button click, stuff like that.
 
@@ -271,10 +295,14 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             zoomOutButton.Hotkey = new HotkeySequence(KeyCode.Semicolon, HotkeySequence.KeyModifiers.None);
 
             // Toggle Left Button Panel
-            Button exitButton = DaggerfallUI.AddButton(new Rect(400, 200, 100, 50), worldMapPanel);
-            exitButton.BackgroundColor = new Color(0.1f, 0.8f, 0.4f, 0.75f); // For testing purposes
-            exitButton.OnMouseClick += ToggleLeftPanel_OnMouseClick;
-            exitButton.ClickSound = DaggerfallUI.Instance.GetAudioClip(SoundClips.AmbientCreepyBirdLaughs);
+            Button toggleUIButton = DaggerfallUI.AddButton(new Rect(400, 200, 100, 50), worldMapPanel);
+            toggleUIButton.BackgroundColor = new Color(0.1f, 0.8f, 0.4f, 0.75f); // For testing purposes
+            toggleUIButton.OnMouseClick += ToggleLeftPanel_OnMouseClick;
+            toggleUIButton.ClickSound = DaggerfallUI.Instance.GetAudioClip(SoundClips.AmbientCreepyBirdCall);
+            TextLabel toggleUIText = DaggerfallUI.AddTextLabel(DaggerfallUI.DefaultFont, Vector2.zero, "Toggle UI", toggleUIButton);
+            toggleUIText.VerticalAlignment = VerticalAlignment.Middle;
+            toggleUIText.HorizontalAlignment = HorizontalAlignment.Center;
+            toggleUIText.TextScale = 4.0f;
 
             /*
             // Exit Button
@@ -294,6 +322,8 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             heightMapTexture = OOTMain.Instance.WorldHeightMapTexture;
             regionBordersTexture = OOTMain.Instance.RegionBordersMapTexture;
             regionBitmapColorsTexture = OOTMain.Instance.RegionBitmapColorTexture;
+
+            borderButtonTexture = OOTMain.Instance.BorderToggleButtonTexture;
         }
 
         protected void SetupChestChoiceButtons()
@@ -477,6 +507,10 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
 
             // Ensure clicks are inside region texture
             if (position.x < 0 || position.x > mainMapRect.width || position.y < 0 || position.y > mainMapRect.height)
+                return;
+
+            // Ignore clicks that are within the screen-space that these buttons occupy while a region is selected. Needed to use "sender.MousePosition" due to the "position" being post-scaling value.
+            if (leftButtonsPanel.Rectangle.Contains(sender.MousePosition) && leftButtonsPanel.Enabled == true)
                 return;
 
             // Play distinct sound just for testing right now.
@@ -1104,6 +1138,14 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
                 leftButtonsPanel.Enabled = false;
             else
                 leftButtonsPanel.Enabled = true;
+        }
+
+        private void ToggleRegionBorders_OnMouseClick(BaseScreenComponent sender, Vector2 position)
+        {
+            if (regionBordersOverlayPanel.Enabled == false)
+                regionBordersOverlayPanel.Enabled = true;
+            else
+                regionBordersOverlayPanel.Enabled = false;
         }
 
         void VariousUsefulNotesAndMethods()

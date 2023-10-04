@@ -184,51 +184,54 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             // Testing First UI Button in left panel
             Button testingUIButton1 = DaggerfallUI.AddButton(new Rect(2, 3, 100, 50), leftButtonsPanel);
             testingUIButton1.BackgroundColor = new Color(0.1f, 0.5f, 0.8f, 0.75f); // For testing purposes
+            testingUIButton1.OnMouseClick += ToggleRegionBorders_OnMouseClick;
             testingUIButton1.ClickSound = DaggerfallUI.Instance.GetAudioClip(SoundClips.AnimalPig);
-            TextLabel buttText1 = DaggerfallUI.AddTextLabel(DaggerfallUI.DefaultFont, Vector2.zero, "Button 1", testingUIButton1);
+            TextLabel buttText1 = DaggerfallUI.AddTextLabel(DaggerfallUI.DefaultFont, Vector2.zero, "Borders", testingUIButton1);
             buttText1.VerticalAlignment = VerticalAlignment.Middle;
             buttText1.HorizontalAlignment = HorizontalAlignment.Center;
-            buttText1.TextScale = 4.0f;
+            buttText1.TextScale = 3.5f;
 
             // Testing Second UI Button in left panel
             Button testingUIButton2 = DaggerfallUI.AddButton(new Rect(2, 55, 100, 50), leftButtonsPanel);
             testingUIButton2.BackgroundColor = new Color(0.1f, 0.5f, 0.8f, 0.75f); // For testing purposes
+            testingUIButton2.OnMouseClick += ToggleLocationDots_OnMouseClick;
             testingUIButton2.ClickSound = DaggerfallUI.Instance.GetAudioClip(SoundClips.AnimalCow);
-            TextLabel buttText2 = DaggerfallUI.AddTextLabel(DaggerfallUI.DefaultFont, Vector2.zero, "Button 2", testingUIButton2);
+            TextLabel buttText2 = DaggerfallUI.AddTextLabel(DaggerfallUI.DefaultFont, Vector2.zero, "Locations", testingUIButton2);
             buttText2.VerticalAlignment = VerticalAlignment.Middle;
             buttText2.HorizontalAlignment = HorizontalAlignment.Center;
-            buttText2.TextScale = 4.0f;
+            buttText2.TextScale = 3.5f;
 
             // Testing Third UI Button in left panel
             Button testingUIButton3 = DaggerfallUI.AddButton(new Rect(2, 107, 100, 50), leftButtonsPanel);
             testingUIButton3.BackgroundColor = new Color(0.1f, 0.5f, 0.8f, 0.75f); // For testing purposes
-            //testingUIButton3.BackgroundTexture = borderButtonTexture;
-            testingUIButton3.OnMouseClick += ToggleRegionBorders_OnMouseClick;
+            testingUIButton3.OnMouseClick += ZoomInView_OnMouseClick;
             testingUIButton3.ClickSound = DaggerfallUI.Instance.GetAudioClip(SoundClips.AnimalCat);
-            TextLabel buttText3 = DaggerfallUI.AddTextLabel(DaggerfallUI.DefaultFont, Vector2.zero, "Borders", testingUIButton3);
+            TextLabel buttText3 = DaggerfallUI.AddTextLabel(DaggerfallUI.DefaultFont, Vector2.zero, "Zoom In +", testingUIButton3);
             buttText3.VerticalAlignment = VerticalAlignment.Middle;
             buttText3.HorizontalAlignment = HorizontalAlignment.Center;
-            buttText3.TextScale = 4.0f;
+            buttText3.TextScale = 3.5f;
 
             // Testing Forth UI Button in left panel
             Button testingUIButton4 = DaggerfallUI.AddButton(new Rect(2, 159, 100, 50), leftButtonsPanel);
             testingUIButton4.BackgroundColor = new Color(0.1f, 0.5f, 0.8f, 0.75f); // For testing purposes
+            testingUIButton4.OnMouseClick += ZoomOutView_OnMouseClick;
             testingUIButton4.ClickSound = DaggerfallUI.Instance.GetAudioClip(SoundClips.AnimalHorse);
-            TextLabel buttText4 = DaggerfallUI.AddTextLabel(DaggerfallUI.DefaultFont, Vector2.zero, "Button 4", testingUIButton4);
+            TextLabel buttText4 = DaggerfallUI.AddTextLabel(DaggerfallUI.DefaultFont, Vector2.zero, "Zoom Out -", testingUIButton4);
             buttText4.VerticalAlignment = VerticalAlignment.Middle;
             buttText4.HorizontalAlignment = HorizontalAlignment.Center;
-            buttText4.TextScale = 4.0f;
+            buttText4.TextScale = 3.5f;
 
             // Testing Fifth UI Button in left panel
             Button testingUIButton5 = DaggerfallUI.AddButton(new Rect(2, 211, 100, 50), leftButtonsPanel);
             testingUIButton5.BackgroundColor = new Color(0.1f, 0.5f, 0.8f, 0.75f); // For testing purposes
+            testingUIButton5.OnMouseClick += ExitMapWindow_OnMouseClick;
             testingUIButton5.ClickSound = DaggerfallUI.Instance.GetAudioClip(SoundClips.AnimalDog);
-            TextLabel buttText5 = DaggerfallUI.AddTextLabel(DaggerfallUI.DefaultFont, Vector2.zero, "Button 5", testingUIButton5);
+            TextLabel buttText5 = DaggerfallUI.AddTextLabel(DaggerfallUI.DefaultFont, Vector2.zero, "EXIT", testingUIButton5);
             buttText5.VerticalAlignment = VerticalAlignment.Middle;
             buttText5.HorizontalAlignment = HorizontalAlignment.Center;
-            buttText5.TextScale = 4.0f;
+            buttText5.TextScale = 3.5f;
 
-            // Tomorrow continue working on the UI buttons and such that I have planned, where they can be expanded and collapsed with a button click, stuff like that.
+            // Tomorrow probably start working on getting the "traveling" part working again hopefully, that and the clock and fast traveling, all that stuff, etc.
 
             // Add region/location label
             regionLabel = DaggerfallUI.AddTextLabel(DaggerfallUI.LargeFont, new Vector2(0, 2), string.Empty, worldMapPanel);
@@ -295,22 +298,16 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             zoomOutButton.Hotkey = new HotkeySequence(KeyCode.Semicolon, HotkeySequence.KeyModifiers.None);
 
             // Toggle Left Button Panel
-            Button toggleUIButton = DaggerfallUI.AddButton(new Rect(400, 200, 100, 50), worldMapPanel);
+            Button toggleUIButton = DaggerfallUI.AddButton(new Rect(0, 0, 100, 50), worldMapPanel);
             toggleUIButton.BackgroundColor = new Color(0.1f, 0.8f, 0.4f, 0.75f); // For testing purposes
             toggleUIButton.OnMouseClick += ToggleLeftPanel_OnMouseClick;
             toggleUIButton.ClickSound = DaggerfallUI.Instance.GetAudioClip(SoundClips.AmbientCreepyBirdCall);
             TextLabel toggleUIText = DaggerfallUI.AddTextLabel(DaggerfallUI.DefaultFont, Vector2.zero, "Toggle UI", toggleUIButton);
             toggleUIText.VerticalAlignment = VerticalAlignment.Middle;
             toggleUIText.HorizontalAlignment = HorizontalAlignment.Center;
-            toggleUIText.TextScale = 4.0f;
+            toggleUIText.TextScale = 3.5f;
 
-            /*
-            // Exit Button
-            Button exitButton = DaggerfallUI.AddButton(new Rect(139, 122, 43, 15), NativePanel);
-            exitButton.BackgroundColor = new Color(0.9f, 0.1f, 0.5f, 0.75f); // For testing purposes
-            exitButton.OnMouseClick += ExitButton_OnMouseClick;
-            exitButton.ClickSound = DaggerfallUI.Instance.GetAudioClip(SoundClips.ButtonClick);
-            */
+            TestPlacingDaggerfallLocationDots();
 
             //SetupChestChoiceButtons();
         }
@@ -341,11 +338,6 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             attemptLockpickButton.ToolTipText = "Attempt Lockpick";
             //attemptLockpickButton.OnMouseClick += AttemptLockpickButton_OnMouseClick;
             attemptLockpickButton.ClickSound = DaggerfallUI.Instance.GetAudioClip(SoundClips.ButtonClick);
-
-            // Exit button
-            Button exitButton = DaggerfallUI.AddButton(new Rect(142, 114, 36, 17), NativePanel);
-            exitButton.OnMouseClick += ExitButton_OnMouseClick;
-            exitButton.ClickSound = DaggerfallUI.Instance.GetAudioClip(SoundClips.ButtonClick);
         }
 
         public override void Update()
@@ -392,11 +384,11 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
 
                 if (Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift)) // Zoom out to mouse position
                 {
-                    ZoomMapTexture(false, false);
+                    ZoomMapTexture(false, false, false);
                 }
                 else // Zoom to mouse position
                 {
-                    ZoomMapTexture(false, true);
+                    ZoomMapTexture(false, true, false);
                 }
             }
             else if ((Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift)) && currentZoom > 1)
@@ -407,7 +399,7 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
 
                 // Scrolling while zoomed in
                 zoomPosition = currentMousePos;
-                ZoomMapTexture(true, false);
+                ZoomMapTexture(true, false, false);
             }
 
             if (Input.GetKeyUp(KeyCode.RightBracket)) // Just temporary way to toggle region borders, plan to have a better hotkey later, as well as a proper UI button for this.
@@ -530,8 +522,6 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
                 pixelBufferPos = (int)(flippedY * mainMapRect.width + usedPosX);
             }
 
-            TestPlacingDaggerfallLocationDots();
-
             TestWherePixelBufferIsLocated(pixelBufferPos);
 
             /*EndPos = GetClickMPCoords();
@@ -555,7 +545,7 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             }*/
         }
 
-        void ZoomMapTexture(bool scrolling, bool zoomIn) // Attempt to get some form of zooming to work on the world map.
+        void ZoomMapTexture(bool scrolling, bool zoomIn, bool forceCenter) // Attempt to get some form of zooming to work on the world map.
         {
             int originalZoom = currentZoom;
             int zoomFactor = 1;
@@ -609,8 +599,8 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             int height = 500;
             int zoomWidth = width / (zoomFactor * 2);
             int zoomHeight = height / (zoomFactor * 2);
-            int startX = (int)zoomPosition.x - zoomWidth;
-            int startY = (int)(height + (-zoomPosition.y - zoomHeight));
+            int startX = forceCenter ? 500 - zoomWidth : (int)zoomPosition.x - zoomWidth;
+            int startY = forceCenter ? 250 - zoomHeight : (int)(height + (-zoomPosition.y - zoomHeight));
 
             // Clamp to edges
             if (startX < 0)
@@ -1127,11 +1117,6 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             }
         }*/
 
-        private void ExitButton_OnMouseClick(BaseScreenComponent sender, Vector2 position)
-        {
-            CloseWindow();
-        }
-
         private void ToggleLeftPanel_OnMouseClick(BaseScreenComponent sender, Vector2 position)
         {
             if (leftButtonsPanel.Enabled == true)
@@ -1146,6 +1131,29 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
                 regionBordersOverlayPanel.Enabled = true;
             else
                 regionBordersOverlayPanel.Enabled = false;
+        }
+
+        private void ToggleLocationDots_OnMouseClick(BaseScreenComponent sender, Vector2 position)
+        {
+            if (locationDotOverlayPanel.Enabled == false)
+                locationDotOverlayPanel.Enabled = true;
+            else
+                locationDotOverlayPanel.Enabled = false;
+        }
+
+        private void ZoomInView_OnMouseClick(BaseScreenComponent sender, Vector2 position)
+        {
+            ZoomMapTexture(false, true, true);
+        }
+
+        private void ZoomOutView_OnMouseClick(BaseScreenComponent sender, Vector2 position)
+        {
+            ZoomMapTexture(false, false, true);
+        }
+
+        private void ExitMapWindow_OnMouseClick(BaseScreenComponent sender, Vector2 position)
+        {
+            CloseWindow();
         }
 
         void VariousUsefulNotesAndMethods()

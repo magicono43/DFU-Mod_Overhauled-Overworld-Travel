@@ -10,6 +10,8 @@ using DaggerfallWorkshop.Utility.AssetInjection;
 using System.IO;
 using DaggerfallConnect.Arena2;
 using System.Linq;
+using DaggerfallConnect.Utility;
+using DaggerfallWorkshop.Game.Utility;
 
 namespace DaggerfallWorkshop.Game.UserInterfaceWindows
 {
@@ -88,10 +90,49 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
         Vector2 zoomPosition = Vector2.zero;
         Vector2 zoomOffset = Vector2.zero;
         Vector2 lastMousePos = Vector2.zero;
+        Vector2 lastClickedPos = Vector2.zero;
 
         Color32[] locationPixelColors;
 
         Dictionary<string, Vector2> offsetLookup = new Dictionary<string, Vector2>();
+
+        WorldTime worldTimer;
+        DaggerfallDateTime dateTime;
+        string clockDisplayString = "";
+        ulong initialDateTimeInSeconds = 0;
+        ulong dateTimeInSeconds = 0;
+        public static bool mapTimeHasChanged = false;
+        protected Button mapClockButton;
+        protected Rect mapClockRect = new Rect(0, 0, 90, 11);
+        protected TextLabel mapClockText;
+
+        protected Button stopTravelButton;
+        protected Rect stopTravelRect = new Rect(0, 0, 45, 11);
+
+        protected Button startFastTravelButton;
+        protected Rect startFastTravelRect = new Rect(0, 0, 45, 11);
+
+        Color32 textShadowColor = new Color32(0, 0, 0, 255);
+        Vector2 textShadowPosition = new Vector2(0.60f, 0.60f);
+
+        public PlayerGPS playerGPS = GameManager.Instance.PlayerGPS;
+
+        public static DFPosition previousPlayerPosition = TravelTimeCalculator.GetPlayerTravelPosition();
+        public static DFPosition nextPlayerPosition = TravelTimeCalculator.GetPlayerTravelPosition();
+        public static DFPosition destinationPosition = TravelTimeCalculator.GetPlayerTravelPosition();
+
+        public static List<DFPosition> currentTravelLinePositionsList = new List<DFPosition>();
+        public static List<DFPosition> followingTravelLinePositionsList = new List<DFPosition>();
+
+        public static int previousRegionIndex = -1;
+        public static int currentRegionIndex = -1;
+
+        public static bool isPlayerTraveling = false;
+
+        int travelDelayTimer = 0;
+
+        DFPosition endPos = new DFPosition(109, 158);
+        public DFPosition EndPos { get { return endPos; } protected internal set { endPos = value; } }
 
         public static Vector2 GetWorldMapPanelSize()
         {
@@ -231,8 +272,6 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             buttText5.HorizontalAlignment = HorizontalAlignment.Center;
             buttText5.TextScale = 3.5f;
 
-            // Tomorrow probably start working on getting the "traveling" part working again hopefully, that and the clock and fast traveling, all that stuff, etc.
-
             // Add region/location label
             regionLabel = DaggerfallUI.AddTextLabel(DaggerfallUI.LargeFont, new Vector2(0, 2), string.Empty, worldMapPanel);
             regionLabel.HorizontalAlignment = HorizontalAlignment.Center;
@@ -251,16 +290,6 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             thirdDebugLabel.HorizontalAlignment = HorizontalAlignment.Left;
             thirdDebugLabel.TextScale = 2.0f;
 
-            // Overlay for the map locations panel
-            locationDotOverlayPanel = DaggerfallUI.AddPanel(rectWorldMap, worldMapPanel);
-            locationDotOverlayPanel.HorizontalAlignment = HorizontalAlignment.Center;
-            locationDotOverlayPanel.VerticalAlignment = VerticalAlignment.Middle;
-            //locationDotOverlayPanel.BackgroundColor = new Color(0.9f, 0.1f, 0.5f, 0.75f); // For testing purposes
-
-            locationDotPixelBuffer = new Color32[(int)rectWorldMap.width * (int)rectWorldMap.height];
-            locationDotTexture = new Texture2D((int)rectWorldMap.width, (int)rectWorldMap.height, TextureFormat.ARGB32, false);
-            locationDotTexture.filterMode = FilterMode.Point;
-
             // Overlay for the player travel path panel
             travelPathOverlayPanel = DaggerfallUI.AddPanel(rectWorldMap, worldMapPanel); // May have to make the Parent panel this panel's parent similar to the worldMapPanel, will see.
             travelPathOverlayPanel.HorizontalAlignment = HorizontalAlignment.Center;
@@ -271,6 +300,16 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             travelPathPixelBuffer = new Color32[(int)rectWorldMap.width * (int)rectWorldMap.height];
             travelPathTexture = new Texture2D((int)rectWorldMap.width, (int)rectWorldMap.height, TextureFormat.ARGB32, false);
             travelPathTexture.filterMode = FilterMode.Point;
+
+            // Overlay for the map locations panel
+            locationDotOverlayPanel = DaggerfallUI.AddPanel(rectWorldMap, worldMapPanel);
+            locationDotOverlayPanel.HorizontalAlignment = HorizontalAlignment.Center;
+            locationDotOverlayPanel.VerticalAlignment = VerticalAlignment.Middle;
+            //locationDotOverlayPanel.BackgroundColor = new Color(0.9f, 0.1f, 0.5f, 0.75f); // For testing purposes
+
+            locationDotPixelBuffer = new Color32[(int)rectWorldMap.width * (int)rectWorldMap.height];
+            locationDotTexture = new Texture2D((int)rectWorldMap.width, (int)rectWorldMap.height, TextureFormat.ARGB32, false);
+            locationDotTexture.filterMode = FilterMode.Point;
 
             // Overlay for the mouse cursor hitbox panel
             mouseCursorHitboxOverlayPanel = DaggerfallUI.AddPanel(rectWorldMap, worldMapPanel); // May have to make the Parent panel this panel's parent similar to the worldMapPanel, will see.
@@ -286,13 +325,6 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             // Setup Color array for determining what region the mouse cursor is currently hovering over
             regionColorsBitmap = regionBitmapColorsTexture.GetPixels32();
 
-            /*
-            Panel chestPictureBox = DaggerfallUI.AddPanel(new Rect(113, 64, 30, 22), NativePanel);
-            chestPictureBox.BackgroundColor = new Color(0.9f, 0.1f, 0.5f, 0.75f); // For testing purposes
-            chestPictureBox.ToolTip = defaultToolTip;
-            chestPictureBox.ToolTipText = "The Chest Looks";
-            */
-
             // Zoom Out Button
             Button zoomOutButton = DaggerfallUI.AddButton(new Rect(0, 0, 0, 0), worldMapPanel);
             zoomOutButton.Hotkey = new HotkeySequence(KeyCode.Semicolon, HotkeySequence.KeyModifiers.None);
@@ -307,9 +339,81 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             toggleUIText.HorizontalAlignment = HorizontalAlignment.Center;
             toggleUIText.TextScale = 3.5f;
 
-            TestPlacingDaggerfallLocationDots();
+            // Map Clock Display
+            mapClockButton = DaggerfallUI.AddButton(new Rect(350, 10, 260, 35), worldMapPanel);
+            mapClockButton.BackgroundColor = new Color(1f, 1f, 1f, 1f); // For testing purposes
+            mapClockButton.OnMouseClick += ClockDisplayButton_OnMouseClick;
+            mapClockText = DaggerfallUI.AddTextLabel(DaggerfallUI.DefaultFont, new Vector2(0, 0), string.Empty, mapClockButton);
+            mapClockText.HorizontalAlignment = HorizontalAlignment.Center;
+            mapClockText.VerticalAlignment = VerticalAlignment.Bottom;
+            mapClockText.ShadowColor = textShadowColor;
+            mapClockText.ShadowPosition = textShadowPosition;
+            mapClockText.TextScale = 3.00f;
+            mapClockText.Text = clockDisplayString;
+            mapClockText.TextColor = new Color(0f, 0f, 0f, 1f);
 
-            //SetupChestChoiceButtons();
+            // Stop Travel button
+            stopTravelButton = DaggerfallUI.AddButton(new Rect(920, 440, 80, 30), worldMapPanel);
+            stopTravelButton.BackgroundColor = new Color(1f, 1f, 1f, 1f); // For testing purposes
+            stopTravelButton.OnMouseClick += StopTravelingButton_OnMouseClick;
+            TextLabel stopTravelText = DaggerfallUI.AddTextLabel(DaggerfallUI.DefaultFont, new Vector2(0, 0), string.Empty, stopTravelButton);
+            stopTravelText.HorizontalAlignment = HorizontalAlignment.Center;
+            stopTravelText.VerticalAlignment = VerticalAlignment.Bottom;
+            stopTravelText.ShadowColor = textShadowColor;
+            stopTravelText.ShadowPosition = textShadowPosition;
+            stopTravelText.TextScale = 3.00f;
+            stopTravelText.Text = "STOP";
+            stopTravelText.TextColor = new Color(0f, 0f, 0f, 1f);
+
+            // Start Fast Travel button
+            startFastTravelButton = DaggerfallUI.AddButton(new Rect(920, 470, 80, 30), worldMapPanel);
+            startFastTravelButton.BackgroundColor = new Color(1f, 1f, 1f, 1f); // For testing purposes
+            startFastTravelButton.OnMouseClick += StartFastTravelButton_OnMouseClick;
+            TextLabel startFastTravelText = DaggerfallUI.AddTextLabel(DaggerfallUI.DefaultFont, new Vector2(0, 0), string.Empty, startFastTravelButton);
+            startFastTravelText.HorizontalAlignment = HorizontalAlignment.Center;
+            startFastTravelText.VerticalAlignment = VerticalAlignment.Bottom;
+            startFastTravelText.ShadowColor = textShadowColor;
+            startFastTravelText.ShadowPosition = textShadowPosition;
+            startFastTravelText.TextScale = 3.00f;
+            startFastTravelText.Text = "TRAVEL";
+            startFastTravelText.TextColor = new Color(0f, 0f, 0f, 1f);
+
+            // So Tomorrow not sure what I am going to work on next honestly, something simple maybe, like a button to center the map view on the current or destination cursor. After that, still not certain, will see.
+
+            UpdatePlayerTravelDotsTexture();
+            TestPlacingDaggerfallLocationDots();
+        }
+
+        private void ClockDisplayButton_OnMouseClick(BaseScreenComponent sender, Vector2 position)
+        {
+            // Does nothing for now but make a click sound, maybe later it can change the time display setting or something?
+            DaggerfallUI.Instance.PlayOneShot(SoundClips.ButtonClick);
+        }
+
+        private void StopTravelingButton_OnMouseClick(BaseScreenComponent sender, Vector2 position)
+        {
+            // Stops travel on the map-screen and sets the destination as the last pixel the player was at on the map when it was clicked.
+            isPlayerTraveling = false;
+            travelDelayTimer = 0;
+
+            currentTravelLinePositionsList = new List<DFPosition>();
+            followingTravelLinePositionsList = new List<DFPosition>();
+            destinationPosition.Y = previousPlayerPosition.Y;
+            destinationPosition.X = previousPlayerPosition.X;
+            nextPlayerPosition.Y = previousPlayerPosition.Y;
+            nextPlayerPosition.X = previousPlayerPosition.X;
+
+            UpdatePlayerTravelDotsTexture();
+
+            DaggerfallUI.Instance.PlayOneShot(SoundClips.ButtonClick);
+        }
+
+        private void StartFastTravelButton_OnMouseClick(BaseScreenComponent sender, Vector2 position)
+        {
+            // Stops travel on the map-screen and performs the necessary actions to bring the player to that current pixel in the game-world, I.E. fast travels to it.
+            DaggerfallUI.Instance.PlayOneShot(SoundClips.ButtonClick);
+
+            CloseWindow();
         }
 
         protected virtual void LoadTextures()
@@ -323,26 +427,96 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             borderButtonTexture = OOTMain.Instance.BorderToggleButtonTexture;
         }
 
-        protected void SetupChestChoiceButtons()
+        public override void OnPush()
         {
-            // Inspect Chest button
-            Button inspectChestButton = DaggerfallUI.AddButton(new Rect(144, 70, 33, 16), NativePanel);
-            inspectChestButton.ToolTip = defaultToolTip;
-            inspectChestButton.ToolTipText = "Inspect Chest";
-            //inspectChestButton.OnMouseClick += InspectChestButton_OnMouseClick;
-            inspectChestButton.ClickSound = DaggerfallUI.Instance.GetAudioClip(SoundClips.ButtonClick);
+            base.OnPush();
 
-            // Attempt Lockpick button
-            Button attemptLockpickButton = DaggerfallUI.AddButton(new Rect(144, 92, 33, 16), NativePanel);
-            attemptLockpickButton.ToolTip = defaultToolTip;
-            attemptLockpickButton.ToolTipText = "Attempt Lockpick";
-            //attemptLockpickButton.OnMouseClick += AttemptLockpickButton_OnMouseClick;
-            attemptLockpickButton.ClickSound = DaggerfallUI.Instance.GetAudioClip(SoundClips.ButtonClick);
+            previousPlayerPosition = TravelTimeCalculator.GetPlayerTravelPosition();
+            nextPlayerPosition = TravelTimeCalculator.GetPlayerTravelPosition();
+            destinationPosition = TravelTimeCalculator.GetPlayerTravelPosition();
+            currentTravelLinePositionsList = new List<DFPosition>();
+            followingTravelLinePositionsList = new List<DFPosition>();
+            isPlayerTraveling = false;
+            mapTimeHasChanged = false;
+
+            worldTimer = GameObject.Find("DaggerfallUnity").GetComponent<WorldTime>();
+            dateTime = worldTimer.DaggerfallDateTime.Clone();
+            initialDateTimeInSeconds = dateTime.ToSeconds();
+            dateTimeInSeconds = dateTime.ToSeconds();
+            clockDisplayString = GetTimeMode(dateTime.Hour, dateTime.Minute) + " , " + dateTime.DayName + " the " + (dateTime.Day + 1) + GetSuffix(dateTime.Day + 1);
+        }
+
+        public override void OnPop()
+        {
+            base.OnPop();
+
+            isPlayerTraveling = false;
+            mapTimeHasChanged = false;
+
+            performFastTravel();
         }
 
         public override void Update()
         {
             base.Update();
+
+            if (mapTimeHasChanged)
+            {
+                dateTime.FromSeconds(dateTimeInSeconds);
+                clockDisplayString = GetTimeMode(dateTime.Hour, dateTime.Minute) + " , " + dateTime.DayName + " the " + (dateTime.Day + 1) + GetSuffix(dateTime.Day + 1);
+                mapClockText.Text = clockDisplayString;
+                mapTimeHasChanged = false;
+            }
+
+            if ((previousPlayerPosition.Y != destinationPosition.Y) || (previousPlayerPosition.X != destinationPosition.X))
+            {
+                isPlayerTraveling = true;
+            }
+            else
+            {
+                isPlayerTraveling = false;
+                followingTravelLinePositionsList = new List<DFPosition>();
+            }
+
+            if (isPlayerTraveling)
+            {
+                ++travelDelayTimer;
+                dateTimeInSeconds += 50;
+                mapTimeHasChanged = true;
+
+                if (travelDelayTimer >= 2)
+                {
+                    travelDelayTimer = 0;
+
+                    /*DFPosition worldPos = MapsFile.MapPixelToWorldCoord(nextPlayerPosition.X, nextPlayerPosition.Y);
+                    playerGPS.WorldX = worldPos.X;
+                    playerGPS.WorldZ = worldPos.Y;
+                    playerGPS.UpdateWorldInfo();*/
+
+                    previousPlayerPosition.Y = nextPlayerPosition.Y;
+                    previousPlayerPosition.X = nextPlayerPosition.X;
+                    if (currentTravelLinePositionsList.Count > 0)
+                    {
+                        followingTravelLinePositionsList.Add(currentTravelLinePositionsList[0]);
+                        currentTravelLinePositionsList.RemoveAt(0);
+
+                        if (currentTravelLinePositionsList.Count > 0)
+                        {
+                            nextPlayerPosition.Y = currentTravelLinePositionsList[0].Y;
+                            nextPlayerPosition.X = currentTravelLinePositionsList[0].X;
+                        }
+                        else
+                        {
+                            nextPlayerPosition.Y = destinationPosition.Y;
+                            nextPlayerPosition.X = destinationPosition.X;
+                            previousPlayerPosition.Y = nextPlayerPosition.Y;
+                            previousPlayerPosition.X = nextPlayerPosition.X;
+                        }
+                    }
+
+                    UpdatePlayerTravelDotsTexture();
+                }
+            }
 
             // Input handling
             HotkeySequence.KeyModifiers keyModifiers = HotkeySequence.GetKeyboardKeyModifiers();
@@ -409,6 +583,275 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
                 else
                     regionBordersOverlayPanel.Enabled = false;
             }
+        }
+
+        // Handle clicks on the world map panel
+        void ClickHandler(BaseScreenComponent sender, Vector2 position)
+        {
+            Rect mainMapRect = sender.Rectangle;
+
+            // Ensure clicks are inside region texture
+            if (position.x < 0 || position.x > mainMapRect.width || position.y < 0 || position.y > mainMapRect.height)
+                return;
+
+            // Ignore clicks that are within the screen-space that these buttons occupy while a region is selected. Needed to use "sender.MousePosition" due to the "position" being post-scaling value.
+            if (leftButtonsPanel.Rectangle.Contains(sender.MousePosition) && leftButtonsPanel.Enabled == true)
+                return;
+
+            //EndPos = new DFPosition((int)position.x, (int)position.y);
+            EndPos = new DFPosition((int)((position.x + (zoomOffset.x * currentZoom)) / currentZoom), (int)((position.y + (zoomOffset.y * currentZoom)) / currentZoom));
+
+            destinationPosition = EndPos;
+            currentTravelLinePositionsList = FindPixelsBetweenPlayerAndDest();
+            if (currentTravelLinePositionsList.Count > 0)
+            {
+                nextPlayerPosition.Y = currentTravelLinePositionsList[0].Y;
+                nextPlayerPosition.X = currentTravelLinePositionsList[0].X;
+                dateTimeInSeconds += 25;
+                mapTimeHasChanged = true;
+            }
+
+            // Play distinct sound just for testing right now.
+            DaggerfallUI.Instance.PlayOneShot(DaggerfallUI.Instance.GetAudioClip(SoundClips.PageTurn));
+
+            Vector2 clickedPos = sender.ScaledMousePosition;
+            lastClickedPos = clickedPos;
+            Debug.LogFormat("Clicked This Spot: x:{0} y:{1}", clickedPos.x, clickedPos.y);
+
+            UpdatePlayerTravelDotsTexture();
+        }
+
+        void UpdatePlayerTravelDotsTexture()
+        {
+            int width = 1000;
+            int height = 500;
+            Array.Clear(travelPathPixelBuffer, 0, travelPathPixelBuffer.Length);
+
+            /*int dottedLineCounter = 0;
+            foreach (DFPosition pixelPos in currentTravelLinePositionsList)
+            {
+                dottedLineCounter++;
+                if (dottedLineCounter % 4 == 0)
+                {
+                    DrawPathLine(pixelPos, widthMulti5, blueColor, ref travelPathPixelBuffer);
+                }
+            }*/
+
+            if ((previousPlayerPosition.Y != destinationPosition.Y) || (previousPlayerPosition.X != destinationPosition.X))
+            {
+                int dottedLineCounter = 0;
+                foreach (DFPosition linePos in followingTravelLinePositionsList)
+                {
+                    dottedLineCounter++;
+                    if (dottedLineCounter >= 0 && dottedLineCounter <= 4)
+                    {
+                        DrawPathLine(linePos, width, height, blackColor, ref travelPathPixelBuffer);
+                    }
+                    else if (dottedLineCounter >= 12)
+                    {
+                        dottedLineCounter = 0;
+                    }
+                }
+
+                // Draw Classic Fallout system "Destination Crosshair" 15x15, where the player last clicked
+                if (lastClickedPos != Vector2.zero)
+                    DrawDestinationCrosshair(width, height, redColor, ref travelPathPixelBuffer);
+            }
+
+            // Draw "Player Position Crosshair" where the player is meant to currently be
+            DrawPlayerCrosshair(width, height, whiteColor, ref travelPathPixelBuffer);
+
+            // Apply updated color array to texture
+            travelPathTexture.SetPixels32(travelPathPixelBuffer);
+            travelPathTexture.Apply();
+
+            // Present texture
+            travelPathOverlayPanel.BackgroundTexture = travelPathTexture;
+        }
+
+        public List<DFPosition> FindPixelsBetweenPlayerAndDest()
+        {
+            int playerXMapPixel = previousPlayerPosition.X;
+            int playerYMapPixel = previousPlayerPosition.Y;
+            int endPosXMapPixel = endPos.X;
+            int endPosYMapPixel = endPos.Y;
+
+            // Do rest of distance calculation and populating list with pixel values in-between playerPos and destinationPos
+            List<DFPosition> pixelsList = new List<DFPosition>();
+            int distanceXMapPixels = endPosXMapPixel - playerXMapPixel;
+            int distanceYMapPixels = endPosYMapPixel - playerYMapPixel;
+            int distanceXMapPixelsAbs = Mathf.Abs(distanceXMapPixels);
+            int distanceYMapPixelsAbs = Mathf.Abs(distanceYMapPixels);
+            int furthestOfXandYDistance = 0;
+
+            if (distanceXMapPixelsAbs <= distanceYMapPixelsAbs)
+                furthestOfXandYDistance = distanceYMapPixelsAbs;
+            else
+                furthestOfXandYDistance = distanceXMapPixelsAbs;
+
+            int xPixelMovementDirection = (distanceXMapPixels >= 0) ? 1 : -1;
+            int yPixelMovementDirection = (distanceYMapPixels >= 0) ? 1 : -1;
+
+            int numberOfMovements = 0;
+            int shorterOfXandYDistanceIncrementer = 0;
+
+            while (numberOfMovements < furthestOfXandYDistance)
+            {
+                DFPosition pixelPos = new DFPosition();
+
+                if (furthestOfXandYDistance == distanceXMapPixelsAbs)
+                {
+                    playerXMapPixel += xPixelMovementDirection;
+                    shorterOfXandYDistanceIncrementer += distanceYMapPixelsAbs;
+
+                    if (shorterOfXandYDistanceIncrementer > distanceXMapPixelsAbs)
+                    {
+                        shorterOfXandYDistanceIncrementer -= distanceXMapPixelsAbs;
+                        playerYMapPixel += yPixelMovementDirection;
+                    }
+                }
+                else
+                {
+                    playerYMapPixel += yPixelMovementDirection;
+                    shorterOfXandYDistanceIncrementer += distanceXMapPixelsAbs;
+
+                    if (shorterOfXandYDistanceIncrementer > distanceYMapPixelsAbs)
+                    {
+                        shorterOfXandYDistanceIncrementer -= distanceYMapPixelsAbs;
+                        playerXMapPixel += xPixelMovementDirection;
+                    }
+                }
+
+                pixelPos.Y = playerYMapPixel;
+                pixelPos.X = playerXMapPixel;
+
+                pixelsList.Add(pixelPos);
+
+                ++numberOfMovements;
+            }
+
+            return pixelsList;
+        }
+
+        // perform fast travel actions
+        private void performFastTravel() // Maybe work on getting this to function again tomorrow or next time, with the more exact screen pixel positions, will see.
+        {
+            isPlayerTraveling = false;
+            travelDelayTimer = 0;
+
+            currentTravelLinePositionsList = new List<DFPosition>();
+            followingTravelLinePositionsList = new List<DFPosition>();
+            destinationPosition.Y = previousPlayerPosition.Y;
+            destinationPosition.X = previousPlayerPosition.X;
+            nextPlayerPosition.Y = previousPlayerPosition.Y;
+            nextPlayerPosition.X = previousPlayerPosition.X;
+
+            UpdatePlayerTravelDotsTexture();
+
+            DaggerfallUI.Instance.FadeBehaviour.SmashHUDToBlack();
+
+            //RaiseOnPreFastTravelEvent(); // So for these events, I'm not sure how or if you can "piggy-back" off the existing ones from another class/window, really not sure how that might be done, so for now whatever.
+
+            DFPosition fastTravelPos = previousPlayerPosition;
+
+            // Cache scene first, if fast travelling while on ship.
+            if (GameManager.Instance.TransportManager.IsOnShip())
+                DaggerfallWorkshop.Game.Serialization.SaveLoadManager.CacheScene(GameManager.Instance.StreamingWorld.SceneName);
+            GameManager.Instance.StreamingWorld.RestoreWorldCompensationHeight(0);
+            GameManager.Instance.StreamingWorld.TeleportToCoordinates((int)fastTravelPos.X, (int)fastTravelPos.Y, StreamingWorld.RepositionMethods.DirectionFromStartMarker);
+
+            GameManager.Instance.PlayerEntity.CurrentHealth = GameManager.Instance.PlayerEntity.MaxHealth;
+            GameManager.Instance.PlayerEntity.CurrentFatigue = GameManager.Instance.PlayerEntity.MaxFatigue;
+            if (!GameManager.Instance.PlayerEntity.Career.NoRegenSpellPoints)
+                GameManager.Instance.PlayerEntity.CurrentMagicka = GameManager.Instance.PlayerEntity.MaxMagicka;
+
+            DaggerfallUnity.WorldTime.DaggerfallDateTime.RaiseTime(dateTimeInSeconds - initialDateTimeInSeconds);
+
+            // Halt random enemy spawns for next playerEntity update so player isn't bombarded by spawned enemies at the end of a long trip
+            GameManager.Instance.PlayerEntity.PreventEnemySpawns = true;
+
+            // Vampires and characters with Damage from Sunlight disadvantage never arrive between 6am and 6pm regardless of travel type
+            // Otherwise raise arrival time to just after 7am if cautious travel would arrive at night
+            /*if (GameManager.Instance.PlayerEffectManager.HasVampirism() || GameManager.Instance.PlayerEntity.Career.DamageFromSunlight)
+            {
+                if (DaggerfallUnity.Instance.WorldTime.DaggerfallDateTime.IsDay)
+                {
+                    DaggerfallUnity.Instance.WorldTime.DaggerfallDateTime.RaiseTime(
+                        (DaggerfallDateTime.DuskHour - DaggerfallUnity.Instance.WorldTime.DaggerfallDateTime.Hour) * 3600);
+                }
+            }*/
+            /*if (speedCautious)
+            {
+                if ((DaggerfallUnity.WorldTime.DaggerfallDateTime.Hour < 7)
+                    || ((DaggerfallUnity.WorldTime.DaggerfallDateTime.Hour == 7) && (DaggerfallUnity.WorldTime.DaggerfallDateTime.Minute < 10)))
+                {
+                    float raiseTime = (((7 - DaggerfallUnity.WorldTime.DaggerfallDateTime.Hour) * 3600)
+                                        + ((10 - DaggerfallUnity.WorldTime.DaggerfallDateTime.Minute) * 60)
+                                        - DaggerfallUnity.WorldTime.DaggerfallDateTime.Second);
+                    DaggerfallUnity.WorldTime.DaggerfallDateTime.RaiseTime(raiseTime);
+                }
+                else if (DaggerfallUnity.WorldTime.DaggerfallDateTime.Hour > 17)
+                {
+                    float raiseTime = (((31 - DaggerfallUnity.WorldTime.DaggerfallDateTime.Hour) * 3600)
+                    + ((10 - DaggerfallUnity.WorldTime.DaggerfallDateTime.Minute) * 60)
+                    - DaggerfallUnity.WorldTime.DaggerfallDateTime.Second);
+                    DaggerfallUnity.WorldTime.DaggerfallDateTime.RaiseTime(raiseTime);
+                }
+            }*/
+
+            GameManager.Instance.PlayerEntity.RaiseSkills();
+            DaggerfallUI.Instance.FadeBehaviour.FadeHUDFromBlack();
+
+            //RaiseOnPostFastTravelEvent();
+        }
+
+        private string GetSuffix(int day)
+        {
+            string suffix = "th";
+            if (day == 1 || day == 21)
+                suffix = "st";
+            else if (day == 2 || day == 22)
+                suffix = "nd";
+            else if (day == 3 || day == 33)
+                suffix = "rd";
+
+            return suffix;
+        }
+
+        private string GetTimeMode(int hours, int minute)
+        {
+            string result;
+
+            if (true) // useTwelveHourClock
+            {
+                if (hours == 0)
+                {
+                    result = "12";
+                }
+                else if (hours >= 13)
+                    result = "" + (hours - 12);
+                else
+                    result = "" + hours;
+            }
+            else
+            {
+                //result = "" + hours;
+            }
+
+            if (minute < 10)
+                result += ":0" + minute;
+            else
+                result += ":" + minute;
+
+            if (true) // useTwelveHourClock
+            {
+                if (hours >= 12)
+                    result += " PM";
+                else
+                    result += " AM";
+            }
+
+            return result;
         }
 
         // Will update the text label showing the location name (if any) currently moused over on the map
@@ -490,59 +933,6 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
 
                 return locationName;
             }
-        }
-
-        // Handle clicks on the world map panel
-        void ClickHandler(BaseScreenComponent sender, Vector2 position)
-        {
-            Rect mainMapRect = sender.Rectangle;
-
-            // Ensure clicks are inside region texture
-            if (position.x < 0 || position.x > mainMapRect.width || position.y < 0 || position.y > mainMapRect.height)
-                return;
-
-            // Ignore clicks that are within the screen-space that these buttons occupy while a region is selected. Needed to use "sender.MousePosition" due to the "position" being post-scaling value.
-            if (leftButtonsPanel.Rectangle.Contains(sender.MousePosition) && leftButtonsPanel.Enabled == true)
-                return;
-
-            // Play distinct sound just for testing right now.
-            DaggerfallUI.Instance.PlayOneShot(DaggerfallUI.Instance.GetAudioClip(SoundClips.PageTurn));
-
-            Vector2 clickedPos = sender.ScaledMousePosition;
-            Debug.LogFormat("Clicked This Spot: x:{0} y:{1}", clickedPos.x, clickedPos.y);
-
-            int flippedY = (int)(mainMapRect.height - clickedPos.y - 1); // To compensate for the pixelBuffer index starting at the opposite part of the screen as the (0, 0) origin for the screen.
-            int pixelBufferPos = (int)(flippedY * mainMapRect.width + clickedPos.x);
-
-            if (currentZoom > 1)
-            {
-                int usedPosX = (int)((clickedPos.x + (zoomOffset.x * currentZoom)) / currentZoom);
-                int usedPosY = (int)((clickedPos.y + (zoomOffset.y * currentZoom)) / currentZoom);
-                flippedY = (int)(mainMapRect.height - usedPosY - 1);
-                pixelBufferPos = (int)(flippedY * mainMapRect.width + usedPosX);
-            }
-
-            TestWherePixelBufferIsLocated(pixelBufferPos);
-
-            /*EndPos = GetClickMPCoords();
-
-            destinationPosition = ConvertDFPosToExactPixelPos(EndPos);
-            currentTravelLinePositionsList = FindPixelsBetweenPlayerAndDest();
-            if (currentTravelLinePositionsList.Count > 0)
-            {
-                nextPlayerPosition.Y = currentTravelLinePositionsList[0].Y;
-                nextPlayerPosition.X = currentTravelLinePositionsList[0].X;
-                dateTimeInSeconds += 25;
-                mapTimeHasChanged = true;
-            }
-
-            UpdatePlayerTravelDotsTexture();
-            UpdateMapLocationDotsTexture();
-
-            if (popUp == null)
-            {
-                popUp = (DaggerfallTravelPopUp)UIWindowFactory.GetInstanceWithArgs(UIWindowType.TravelPopUp, new object[] { uiManager, uiManager.TopWindow, this });
-            }*/
         }
 
         void ZoomMapTexture(bool scrolling, bool zoomIn, bool forceCenter) // Attempt to get some form of zooming to work on the world map.
@@ -684,51 +1074,6 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             locationDotOverlayPanel.BackgroundTexture = locationDotTexture;
         }
 
-        void TestWherePixelBufferIsLocated(int clickedSpot)
-        {
-            Vector2 mapDimensions = GetWorldMapPanelSize();
-            int width = (int)mapDimensions.x;
-            int height = (int)mapDimensions.y;
-
-            Array.Clear(travelPathPixelBuffer, 0, travelPathPixelBuffer.Length);
-
-            DrawClickedSpotCursor(clickedSpot, width, ref travelPathPixelBuffer);
-
-            /*int spacing = 5;
-
-            // Plot locations to color array
-            Array.Clear(travelPathPixelBuffer, 0, travelPathPixelBuffer.Length);
-            for (int y = 0; y < height; y++)
-            {
-                for (int x = 0; x < width; x++)
-                {
-                    if (x % spacing == 0 || y % spacing == 0)
-                    {
-                        int index = y * width + x;
-                        travelPathPixelBuffer[index] = whiteColor;
-                    }
-                }
-            }*/
-
-            // Apply updated color array to texture
-            travelPathTexture.SetPixels32(travelPathPixelBuffer);
-            travelPathTexture.Apply();
-
-            // Present texture
-            travelPathOverlayPanel.BackgroundTexture = travelPathTexture;
-        }
-
-        void DrawClickedSpotCursor(int pixelPos, int width, ref Color32[] pixelBuffer) // Right now assuming 4x4 "pixel" size or 16 area, will need to consider other resolution values later.
-        {
-            /*
-            for (int i = -3; i < 3; i++) { pixelBuffer[pixelPos + i] = whiteColor; }
-            for (int i = -3; i < 3; i++) { pixelBuffer[pixelPos - width + i] = whiteColor; }
-
-            for (int i = -3; i < 3; i++) { pixelBuffer[pixelPos + (width * i)] = whiteColor; }
-            for (int i = -3; i < 3; i++) { pixelBuffer[pixelPos + (width * i) - 1] = whiteColor; }
-            */
-        }
-
         void TestWhereMouseCursorHitboxIsLocated(int hitboxCenter)
         {
             Vector2 mapDimensions = GetWorldMapPanelSize();
@@ -745,6 +1090,40 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
 
             // Present texture
             mouseCursorHitboxOverlayPanel.BackgroundTexture = mouseCursorHitboxTexture;
+        }
+
+        public void DrawPlayerCrosshair(int width, int height, Color32 pathColor, ref Color32[] pixelBuffer)
+        {
+            int flippedY = (int)(height - previousPlayerPosition.Y - 1); // To compensate for the pixelBuffer index starting at the opposite part of the screen as the (0, 0) origin for the screen.
+            int pixelPos = (int)(flippedY * width + previousPlayerPosition.X);
+
+            for (int i = -2; i < 3; i++) { pixelBuffer[pixelPos + i] = pathColor; }
+            //for (int i = -3; i < 3; i++) { pixelBuffer[pixelPos - width + i] = pathColor; }
+
+            for (int i = -2; i < 3; i++) { pixelBuffer[pixelPos + (width * i)] = pathColor; }
+            //for (int i = -3; i < 3; i++) { pixelBuffer[pixelPos + (width * i) - 1] = pathColor; }
+        }
+
+        public void DrawPathLine(DFPosition linePos, int width, int height, Color32 pathColor, ref Color32[] pixelBuffer)
+        {
+            int flippedY = (int)(height - linePos.Y - 1); // To compensate for the pixelBuffer index starting at the opposite part of the screen as the (0, 0) origin for the screen.
+            int pixelPos = (int)(flippedY * width + linePos.X);
+
+            for (int i = -1; i < 1; i++) { pixelBuffer[pixelPos + width + i] = pathColor; }
+            for (int i = -1; i < 1; i++) { pixelBuffer[pixelPos + i] = pathColor; }
+            //for (int i = -1; i < 2; i++) { pixelBuffer[offset - width + i] = pathColor; }
+        }
+
+        public void DrawDestinationCrosshair(int width, int height, Color32 pathColor, ref Color32[] pixelBuffer)
+        {
+            int flippedY = (int)(height - destinationPosition.Y - 1); // To compensate for the pixelBuffer index starting at the opposite part of the screen as the (0, 0) origin for the screen.
+            int pixelPos = (int)(flippedY * width + destinationPosition.X);
+
+            for (int i = -2; i < 3; i++) { pixelBuffer[pixelPos + i] = pathColor; }
+            //for (int i = -3; i < 3; i++) { pixelBuffer[pixelPos - width + i] = pathColor; }
+
+            for (int i = -2; i < 3; i++) { pixelBuffer[pixelPos + (width * i)] = pathColor; }
+            //for (int i = -3; i < 3; i++) { pixelBuffer[pixelPos + (width * i) - 1] = pathColor; }
         }
 
         void DrawMouseCursorHitboxArea(int pixelPos, int width, ref Color32[] pixelBuffer) // Right now assuming 2x2 "pixel" size or 4 area, will need to consider other resolution values later.
@@ -947,72 +1326,6 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             offsetLookup.Add("FMAP0I59.IMG", new Vector2(0, 0));        // Glenumbra Moors correct at 0,0
             offsetLookup.Add("FMAP0I60.IMG", new Vector2(107, 11));
             offsetLookup.Add("FMAP0I61.IMG", new Vector2(255, 275));    // Cybiades
-        }
-
-        void UpdatePlayerTravelDotsTexture()
-        {
-            /*DFPosition playerWorldPos = TravelTimeCalculator.GetPlayerTravelPosition();
-            if (previousPlayerPosition.Y == playerWorldPos.Y && previousPlayerPosition.X == playerWorldPos.X)
-            {
-                previousPlayerPosition = ConvertDFPosToExactPixelPos(previousPlayerPosition);
-                nextPlayerPosition.Y = previousPlayerPosition.Y;
-                nextPlayerPosition.X = previousPlayerPosition.X;
-                destinationPosition.Y = previousPlayerPosition.Y;
-                destinationPosition.X = previousPlayerPosition.X;
-                playerPosAlreadyConverted = true;
-            }
-
-            // Get map and dimensions
-            string mapName = selectedRegionMapNames[mapIndex];
-            Vector2 origin = offsetLookup[mapName];
-            int originX = (int)origin.x;
-            int originY = (int)origin.y;
-            int width = (int)regionTextureOverlayPanelRect.width;
-            int height = (int)regionTextureOverlayPanelRect.height;
-            scale = GetRegionMapScale(selectedRegion);
-            Array.Clear(travelPathPixelBuffer, 0, travelPathPixelBuffer.Length);
-
-            int widthMulti5 = width * 5;
-
-            /*int dottedLineCounter = 0;
-            foreach (DFPosition pixelPos in currentTravelLinePositionsList)
-            {
-                dottedLineCounter++;
-                if (dottedLineCounter % 4 == 0)
-                {
-                    DrawPathLine(pixelPos, widthMulti5, blueColor, ref travelPathPixelBuffer);
-                }
-            }*/
-
-            /*if ((previousPlayerPosition.Y != destinationPosition.Y) || (previousPlayerPosition.X != destinationPosition.X))
-            {
-                int dottedLineCounter = 0;
-                foreach (DFPosition pixelPos in followingTravelLinePositionsList)
-                {
-                    dottedLineCounter++;
-                    if (dottedLineCounter >= 0 && dottedLineCounter <= 4)
-                    {
-                        DrawPathLine(pixelPos, widthMulti5, blueColor, ref travelPathPixelBuffer);
-                    }
-                    else if (dottedLineCounter >= 12)
-                    {
-                        dottedLineCounter = 0;
-                    }
-                }
-
-                // Draw Classic Fallout system "Destination Crosshair" 15x15, where the player last clicked
-                DrawDestinationCrosshair(destinationPosition, widthMulti5, redColor, ref travelPathPixelBuffer);
-            }
-
-            // Draw "Player Position Crosshair" where the player is meant to currently be
-            DrawPlayerPosition(previousPlayerPosition, widthMulti5, whiteColor, ref travelPathPixelBuffer);
-
-            // Apply updated color array to texture
-            travelPathTexture.SetPixels32(travelPathPixelBuffer);
-            travelPathTexture.Apply();
-
-            // Present texture
-            travelPathOverlayPanel.BackgroundTexture = travelPathTexture;*/
         }
 
         /*

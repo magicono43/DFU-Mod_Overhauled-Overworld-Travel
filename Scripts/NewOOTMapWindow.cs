@@ -33,6 +33,7 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
         public static Color32 blueColor = new Color32(0, 0, 255, 255);
         public static Color32 blackColor = new Color32(0, 0, 0, 255);
         public static Color32 whiteColor = new Color32(255, 255, 255, 255);
+        public static Color32 emptyColor = new Color32(0, 0, 0, 0);
 
         public static Rect butt1 = new Rect(0, 0, 0, 0);
         public static Rect butt2 = new Rect(0, 0, 0, 0);
@@ -78,6 +79,10 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
         Texture2D mouseCursorHitboxTexture;
         Color32[] mouseCursorHitboxPixelBuffer;
 
+        Panel fogOfWarOverlayPanel;
+        Texture2D fogOfWarTexture;
+        Color32[] fogOfWarPixelBuffer;
+
         Color32[] regionColorsBitmap;
 
         TextLabel regionLabel;
@@ -96,6 +101,8 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
         Color32[] locationPixelColors;
 
         Dictionary<string, Vector2> offsetLookup = new Dictionary<string, Vector2>();
+
+        int[,] exploredPixelArray = new int[1000, 500];
 
         WorldTime worldTimer;
         DaggerfallDateTime dateTime;
@@ -178,6 +185,15 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
                 new Color32(colors.GetRed(37), colors.GetGreen(37), colors.GetBlue(37), 255),     //village (R155, G105, B106)
             };
 
+            // Fill "fog of war" tracking array with empty values initially
+            for (int x = 0; x < 1000; x++)
+            {
+                for (int y = 0; y < 500; y++)
+                {
+                    exploredPixelArray[x, y] = 0; // Set the initial value for each pixel
+                }
+            }
+
             // Load textures
             LoadTextures();
 
@@ -219,66 +235,6 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             regionBordersOverlayPanel.BackgroundTexture = regionBordersTexture;
             regionBordersOverlayPanel.Enabled = false;
 
-            // Panel housing the button bar on the left of the screen
-            leftButtonsPanel = DaggerfallUI.AddPanel(new Rect(0, 125, 105, 265), worldMapPanel);
-            leftButtonsPanel.BackgroundColor = new Color(0.9f, 0.1f, 0.5f, 0.75f); // For testing purposes
-
-            // Testing First UI Button in left panel
-            Button testingUIButton1 = CreateGenericTextButton(new Rect(2, 3, 100, 50), leftButtonsPanel, (int)SoundClips.AnimalPig, "Borders", 3.5f);
-            testingUIButton1.OnMouseClick += ToggleRegionBorders_OnMouseClick;
-
-            // Testing Second UI Button in left panel
-            Button testingUIButton2 = CreateGenericTextButton(new Rect(2, 55, 100, 50), leftButtonsPanel, (int)SoundClips.AnimalCow, "Locations", 3.5f);
-            testingUIButton2.OnMouseClick += ToggleLocationDots_OnMouseClick;
-
-            // Testing Third UI Button in left panel
-            Button testingUIButton3 = CreateGenericTextButton(new Rect(2, 107, 100, 50), leftButtonsPanel, (int)SoundClips.AnimalCat, "Zoom In +", 3.5f);
-            testingUIButton3.OnMouseClick += ZoomInView_OnMouseClick;
-
-            // Testing Forth UI Button in left panel
-            Button testingUIButton4 = CreateGenericTextButton(new Rect(2, 159, 100, 50), leftButtonsPanel, (int)SoundClips.AnimalHorse, "Zoom In -", 3.5f);
-            testingUIButton4.OnMouseClick += ZoomOutView_OnMouseClick;
-
-            // Testing Fifth UI Button in left panel
-            Button testingUIButton5 = CreateGenericTextButton(new Rect(2, 211, 100, 50), leftButtonsPanel, (int)SoundClips.AnimalDog, "EXIT", 3.5f);
-            testingUIButton5.OnMouseClick += ExitMapWindow_OnMouseClick;
-
-            // Panel housing the button bar on the right of the screen
-            rightButtonsPanel = DaggerfallUI.AddPanel(new Rect(895, 125, 105, 265), worldMapPanel);
-            rightButtonsPanel.BackgroundColor = new Color(0.9f, 0.1f, 0.5f, 0.75f); // For testing purposes
-
-            // Testing First UI Button in right panel
-            Button testingUIButton6 = CreateGenericTextButton(new Rect(2, 3, 100, 50), rightButtonsPanel, (int)SoundClips.MakeItem, "Center View", 3.0f);
-            testingUIButton6.OnMouseClick += CenterMapView_OnMouseClick;
-
-            // Testing Second UI Button in right panel
-            Button testingUIButton7 = CreateGenericTextButton(new Rect(2, 55, 100, 50), rightButtonsPanel, (int)SoundClips.ActivateRatchet, "Center On Player", 3.0f);
-            testingUIButton7.OnMouseClick += CenterOnPlayer_OnMouseClick;
-
-            // Testing Third UI Button in right panel
-            Button testingUIButton8 = CreateGenericTextButton(new Rect(2, 107, 100, 50), rightButtonsPanel, (int)SoundClips.EnemyBearAttack, "Center On Destination", 3.0f);
-            testingUIButton8.OnMouseClick += CenterOnDestination_OnMouseClick;
-
-            // Tomorrow maybe I'll try to work on that hidden/fog-of-war thing I was thinking of trying, but I'll see.
-
-            // Add region/location label
-            regionLabel = DaggerfallUI.AddTextLabel(DaggerfallUI.LargeFont, new Vector2(0, 2), string.Empty, worldMapPanel);
-            regionLabel.HorizontalAlignment = HorizontalAlignment.Center;
-            regionLabel.TextScale = 2.7f;
-
-            // Add debug display labels
-            firstDebugLabel = DaggerfallUI.AddTextLabel(DaggerfallUI.LargeFont, new Vector2(0, 2), string.Empty, worldMapPanel);
-            firstDebugLabel.HorizontalAlignment = HorizontalAlignment.Left;
-            firstDebugLabel.TextScale = 2.0f;
-
-            secondDebugLabel = DaggerfallUI.AddTextLabel(DaggerfallUI.LargeFont, new Vector2(0, 25), string.Empty, worldMapPanel);
-            secondDebugLabel.HorizontalAlignment = HorizontalAlignment.Left;
-            secondDebugLabel.TextScale = 2.0f;
-
-            thirdDebugLabel = DaggerfallUI.AddTextLabel(DaggerfallUI.LargeFont, new Vector2(0, 48), string.Empty, worldMapPanel);
-            thirdDebugLabel.HorizontalAlignment = HorizontalAlignment.Left;
-            thirdDebugLabel.TextScale = 2.0f;
-
             // Overlay for the player travel path panel
             travelPathOverlayPanel = DaggerfallUI.AddPanel(rectWorldMap, worldMapPanel); // May have to make the Parent panel this panel's parent similar to the worldMapPanel, will see.
             travelPathOverlayPanel.HorizontalAlignment = HorizontalAlignment.Center;
@@ -301,15 +257,88 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             locationDotTexture.filterMode = FilterMode.Point;
 
             // Overlay for the mouse cursor hitbox panel
-            mouseCursorHitboxOverlayPanel = DaggerfallUI.AddPanel(rectWorldMap, worldMapPanel); // May have to make the Parent panel this panel's parent similar to the worldMapPanel, will see.
+            mouseCursorHitboxOverlayPanel = DaggerfallUI.AddPanel(rectWorldMap, worldMapPanel);
             mouseCursorHitboxOverlayPanel.HorizontalAlignment = HorizontalAlignment.Center;
             mouseCursorHitboxOverlayPanel.VerticalAlignment = VerticalAlignment.Middle;
-            //travelPathOverlayPanel.BackgroundColor = new Color(0.9f, 0.1f, 0.5f, 0.75f); // For testing purposes
 
             // Setup pixel buffer and texture for mouse cursor hitbox area
             mouseCursorHitboxPixelBuffer = new Color32[(int)rectWorldMap.width * (int)rectWorldMap.height];
             mouseCursorHitboxTexture = new Texture2D((int)rectWorldMap.width, (int)rectWorldMap.height, TextureFormat.ARGB32, false);
             mouseCursorHitboxTexture.filterMode = FilterMode.Point;
+
+            // Overlay for the fog of war panel
+            fogOfWarOverlayPanel = DaggerfallUI.AddPanel(rectWorldMap, worldMapPanel);
+            fogOfWarOverlayPanel.HorizontalAlignment = HorizontalAlignment.Center;
+            fogOfWarOverlayPanel.VerticalAlignment = VerticalAlignment.Middle;
+
+            // Setup pixel buffer and texture for map fog of war
+            fogOfWarPixelBuffer = new Color32[(int)rectWorldMap.width * (int)rectWorldMap.height];
+            fogOfWarTexture = new Texture2D((int)rectWorldMap.width, (int)rectWorldMap.height, TextureFormat.ARGB32, false);
+            fogOfWarTexture.filterMode = FilterMode.Point;
+
+            // Panel housing the button bar on the left of the screen
+            leftButtonsPanel = DaggerfallUI.AddPanel(new Rect(0, 125, 105, 265), worldMapPanel);
+            leftButtonsPanel.BackgroundColor = new Color(0.9f, 0.1f, 0.5f, 0.75f); // For testing purposes
+
+            // Testing First UI Button in left panel
+            Button testingUIButton1 = CreateGenericTextButton(new Rect(2, 3, 100, 50), leftButtonsPanel, (int)SoundClips.AnimalPig, "Borders", 3.5f);
+            testingUIButton1.OnMouseClick += ToggleRegionBorders_OnMouseClick;
+
+            // Testing Second UI Button in left panel
+            Button testingUIButton2 = CreateGenericTextButton(new Rect(2, 55, 100, 50), leftButtonsPanel, (int)SoundClips.AnimalCow, "Locations", 3.5f);
+            testingUIButton2.OnMouseClick += ToggleLocationDots_OnMouseClick;
+
+            // Testing Third UI Button in left panel
+            Button testingUIButton3 = CreateGenericTextButton(new Rect(2, 107, 100, 50), leftButtonsPanel, (int)SoundClips.AnimalCat, "Zoom In +", 3.0f);
+            testingUIButton3.OnMouseClick += ZoomInView_OnMouseClick;
+
+            // Testing Forth UI Button in left panel
+            Button testingUIButton4 = CreateGenericTextButton(new Rect(2, 159, 100, 50), leftButtonsPanel, (int)SoundClips.AnimalHorse, "Zoom Out -", 3.0f);
+            testingUIButton4.OnMouseClick += ZoomOutView_OnMouseClick;
+
+            // Testing Fifth UI Button in left panel
+            Button testingUIButton5 = CreateGenericTextButton(new Rect(2, 211, 100, 50), leftButtonsPanel, (int)SoundClips.AnimalDog, "EXIT", 4.0f);
+            testingUIButton5.OnMouseClick += ExitMapWindow_OnMouseClick;
+
+            // Panel housing the button bar on the right of the screen
+            rightButtonsPanel = DaggerfallUI.AddPanel(new Rect(895, 125, 105, 265), worldMapPanel);
+            rightButtonsPanel.BackgroundColor = new Color(0.9f, 0.1f, 0.5f, 0.75f); // For testing purposes
+
+            // Testing First UI Button in right panel
+            Button testingUIButton6 = CreateGenericTextButton(new Rect(2, 3, 100, 50), rightButtonsPanel, (int)SoundClips.MakeItem, "Center View", 3.0f);
+            testingUIButton6.OnMouseClick += CenterMapView_OnMouseClick;
+
+            // Testing Second UI Button in right panel
+            Button testingUIButton7 = CreateGenericTextButton(new Rect(2, 55, 100, 50), rightButtonsPanel, (int)SoundClips.ActivateRatchet, "Center On Player", 3.0f);
+            testingUIButton7.OnMouseClick += CenterOnPlayer_OnMouseClick;
+
+            // Testing Third UI Button in right panel
+            Button testingUIButton8 = CreateGenericTextButton(new Rect(2, 107, 100, 50), rightButtonsPanel, (int)SoundClips.EnemyBearAttack, "Center On Destination", 3.0f);
+            testingUIButton8.OnMouseClick += CenterOnDestination_OnMouseClick;
+
+            // Testing Forth UI Button in right panel
+            Button testingUIButton9 = CreateGenericTextButton(new Rect(2, 159, 100, 50), rightButtonsPanel, (int)SoundClips.EnemyWraithAttack, "Fog of War", 3.0f);
+            testingUIButton9.OnMouseClick += ToggleFogOfWar_OnMouseClick;
+
+            // Tomorrow maybe I'll try to get a toggle to work that "auto-centers" the map-view on the player, so the fog of war works better/is easier to click around with, also more fog of war work, will see.
+
+            // Add region/location label
+            regionLabel = DaggerfallUI.AddTextLabel(DaggerfallUI.LargeFont, new Vector2(0, 2), string.Empty, worldMapPanel);
+            regionLabel.HorizontalAlignment = HorizontalAlignment.Center;
+            regionLabel.TextScale = 2.7f;
+
+            // Add debug display labels
+            firstDebugLabel = DaggerfallUI.AddTextLabel(DaggerfallUI.LargeFont, new Vector2(0, 2), string.Empty, worldMapPanel);
+            firstDebugLabel.HorizontalAlignment = HorizontalAlignment.Left;
+            firstDebugLabel.TextScale = 2.0f;
+
+            secondDebugLabel = DaggerfallUI.AddTextLabel(DaggerfallUI.LargeFont, new Vector2(0, 25), string.Empty, worldMapPanel);
+            secondDebugLabel.HorizontalAlignment = HorizontalAlignment.Left;
+            secondDebugLabel.TextScale = 2.0f;
+
+            thirdDebugLabel = DaggerfallUI.AddTextLabel(DaggerfallUI.LargeFont, new Vector2(0, 48), string.Empty, worldMapPanel);
+            thirdDebugLabel.HorizontalAlignment = HorizontalAlignment.Left;
+            thirdDebugLabel.TextScale = 2.0f;
 
             // Setup Color array for determining what region the mouse cursor is currently hovering over
             regionColorsBitmap = regionBitmapColorsTexture.GetPixels32();
@@ -631,6 +660,12 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             int height = 500;
             Array.Clear(travelPathPixelBuffer, 0, travelPathPixelBuffer.Length);
 
+            // Fills "fog of war" pixel buffer entirely with black, then later "chip away" this color to hopefully reduce overall operations, will see.
+            for (int i = 0; i < fogOfWarPixelBuffer.Length; i++)
+            {
+                fogOfWarPixelBuffer[i] = blackColor;
+            }
+
             /*int dottedLineCounter = 0;
             foreach (DFPosition pixelPos in currentTravelLinePositionsList)
             {
@@ -665,12 +700,52 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             // Draw "Player Position Crosshair" where the player is meant to currently be
             DrawPlayerCrosshair(width, height, whiteColor, ref travelPathPixelBuffer);
 
+            // Reveal/update areas of the map the player has explored and removed the fog of war from
+            int playX = previousPlayerPosition.X;
+            int playY = previousPlayerPosition.Y;
+            int radius = 22;
+            // Attempt to map a filled circle around the player, this will be the fog of war "revealing" area
+            for (int y = playY - radius; y <= playY + radius; y++)
+            {
+                for (int x = playX - radius; x <= playX + radius; x++)
+                {
+                    // Check if the current pixel is within the circle's bounds
+                    if (Mathf.Pow(x - playX, 2) + Mathf.Pow(y - playY, 2) <= radius * radius)
+                    {
+                        // Ensure the x and y coordinates are within the pixel buffer bounds
+                        if (x >= 0 && x < width && y >= 0 && y < height)
+                        {
+                            // Set the pixel color to the specified color
+                            exploredPixelArray[x, y] = 1;
+                        }
+                    }
+                }
+            }
+
+            // Erase "fog of war" texture from the map, depending on where the player currently is and has been
+            for (int y = 0; y < height; y++)
+            {
+                for (int x = 0; x < width; x++)
+                {
+                    if (exploredPixelArray[x, y] != 0)
+                    {
+                        int flippedY = (int)(height - y - 1); // To compensate for the pixelBuffer index starting at the opposite part of the screen as the (0, 0) origin for the screen.
+                        int pixelPos = (int)(flippedY * width + x);
+
+                        fogOfWarPixelBuffer[pixelPos] = emptyColor;
+                    }
+                }
+            }
+
             // Apply updated color array to texture
             travelPathTexture.SetPixels32(travelPathPixelBuffer);
             travelPathTexture.Apply();
+            fogOfWarTexture.SetPixels32(fogOfWarPixelBuffer);
+            fogOfWarTexture.Apply();
 
             // Present texture
             travelPathOverlayPanel.BackgroundTexture = travelPathTexture;
+            fogOfWarOverlayPanel.BackgroundTexture = fogOfWarTexture;
         }
 
         public List<DFPosition> FindPixelsBetweenPlayerAndDest()
@@ -959,6 +1034,7 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
                 locationDotOverlayPanel.BackgroundTextureLayout = BackgroundLayout.StretchToFill;
                 travelPathOverlayPanel.BackgroundTextureLayout = BackgroundLayout.StretchToFill;
                 mouseCursorHitboxOverlayPanel.BackgroundTextureLayout = BackgroundLayout.StretchToFill;
+                fogOfWarOverlayPanel.BackgroundTextureLayout = BackgroundLayout.StretchToFill;
 
                 if (zoomIn)
                 {
@@ -1024,6 +1100,8 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             travelPathOverlayPanel.BackgroundCroppedRect = worldMapNewRect;
             mouseCursorHitboxOverlayPanel.BackgroundTextureLayout = BackgroundLayout.Cropped;
             mouseCursorHitboxOverlayPanel.BackgroundCroppedRect = worldMapNewRect;
+            fogOfWarOverlayPanel.BackgroundTextureLayout = BackgroundLayout.Cropped;
+            fogOfWarOverlayPanel.BackgroundCroppedRect = worldMapNewRect;
         }
 
         void TestPlacingDaggerfallLocationDots()
@@ -1105,10 +1183,22 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             int flippedY = (int)(height - previousPlayerPosition.Y - 1); // To compensate for the pixelBuffer index starting at the opposite part of the screen as the (0, 0) origin for the screen.
             int pixelPos = (int)(flippedY * width + previousPlayerPosition.X);
 
-            for (int i = -2; i < 3; i++) { pixelBuffer[pixelPos + i] = pathColor; }
+            for (int i = -2; i < 3; i++)
+            {
+                if (pixelPos + i < 0 || pixelPos + i > pixelBuffer.Length)
+                    continue;
+                else
+                    pixelBuffer[pixelPos + i] = pathColor;
+            }
             //for (int i = -3; i < 3; i++) { pixelBuffer[pixelPos - width + i] = pathColor; }
 
-            for (int i = -2; i < 3; i++) { pixelBuffer[pixelPos + (width * i)] = pathColor; }
+            for (int i = -2; i < 3; i++)
+            {
+                if (pixelPos + (width * i) < 0 || pixelPos + (width * i) > pixelBuffer.Length)
+                    continue;
+                else
+                    pixelBuffer[pixelPos + (width * i)] = pathColor;
+            }
             //for (int i = -3; i < 3; i++) { pixelBuffer[pixelPos + (width * i) - 1] = pathColor; }
         }
 
@@ -1117,8 +1207,20 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             int flippedY = (int)(height - linePos.Y - 1); // To compensate for the pixelBuffer index starting at the opposite part of the screen as the (0, 0) origin for the screen.
             int pixelPos = (int)(flippedY * width + linePos.X);
 
-            for (int i = -1; i < 1; i++) { pixelBuffer[pixelPos + width + i] = pathColor; }
-            for (int i = -1; i < 1; i++) { pixelBuffer[pixelPos + i] = pathColor; }
+            for (int i = -1; i < 1; i++)
+            {
+                if (pixelPos + width + i < 0 || pixelPos + width + i > pixelBuffer.Length)
+                    continue;
+                else
+                    pixelBuffer[pixelPos + width + i] = pathColor;
+            }
+            for (int i = -1; i < 1; i++)
+            {
+                if (pixelPos + i < 0 || pixelPos + i > pixelBuffer.Length)
+                    continue;
+                else
+                    pixelBuffer[pixelPos + i] = pathColor;
+            }
             //for (int i = -1; i < 2; i++) { pixelBuffer[offset - width + i] = pathColor; }
         }
 
@@ -1127,11 +1229,31 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             int flippedY = (int)(height - destinationPosition.Y - 1); // To compensate for the pixelBuffer index starting at the opposite part of the screen as the (0, 0) origin for the screen.
             int pixelPos = (int)(flippedY * width + destinationPosition.X);
 
-            for (int i = -2; i < 3; i++) { pixelBuffer[pixelPos + i] = pathColor; }
+            for (int i = -2; i < 3; i++)
+            {
+                if (pixelPos + i < 0 || pixelPos + i > pixelBuffer.Length)
+                    continue;
+                else
+                    pixelBuffer[pixelPos + i] = pathColor;
+            }
             //for (int i = -3; i < 3; i++) { pixelBuffer[pixelPos - width + i] = pathColor; }
 
-            for (int i = -2; i < 3; i++) { pixelBuffer[pixelPos + (width * i)] = pathColor; }
+            for (int i = -2; i < 3; i++)
+            {
+                if (pixelPos + (width * i) < 0 || pixelPos + (width * i) > pixelBuffer.Length)
+                    continue;
+                else
+                    pixelBuffer[pixelPos + (width * i)] = pathColor;
+            }
             //for (int i = -3; i < 3; i++) { pixelBuffer[pixelPos + (width * i) - 1] = pathColor; }
+        }
+
+        public void DrawFogOfWar(DFPosition fogPos, int width, int height, Color32 pathColor, ref Color32[] pixelBuffer)
+        {
+            int flippedY = (int)(height - fogPos.Y - 1); // To compensate for the pixelBuffer index starting at the opposite part of the screen as the (0, 0) origin for the screen.
+            int pixelPos = (int)(flippedY * width + fogPos.X);
+
+            pixelBuffer[pixelPos] = pathColor;
         }
 
         void DrawMouseCursorHitboxArea(int pixelPos, int width, ref Color32[] pixelBuffer) // Right now assuming 2x2 "pixel" size or 4 area, will need to consider other resolution values later.
@@ -1504,6 +1626,14 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             {
                 ZoomMapTexture(true, false, false, false, true);
             }
+        }
+
+        private void ToggleFogOfWar_OnMouseClick(BaseScreenComponent sender, Vector2 position)
+        {
+            if (fogOfWarOverlayPanel.Enabled == false)
+                fogOfWarOverlayPanel.Enabled = true;
+            else
+                fogOfWarOverlayPanel.Enabled = false;
         }
 
         void VariousUsefulNotesAndMethods()

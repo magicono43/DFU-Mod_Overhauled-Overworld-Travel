@@ -3,7 +3,7 @@
 // License:         MIT License (http://www.opensource.org/licenses/mit-license.php)
 // Author:          Kirk.O
 // Created On: 	    8/3/2023, 8:40 PM
-// Last Edit:		10/9/2023, 8:20 PM
+// Last Edit:		10/10/2023, 9:00 PM
 // Version:			1.00
 // Special Thanks:  
 // Modifier:
@@ -41,6 +41,7 @@ namespace OverhauledOverworldTravel
         public Texture2D WorldHeightMapTexture;
         public Texture2D RegionBordersMapTexture;
         public Texture2D RegionBitmapColorTexture;
+        public Texture2D UnexploredMapOverlayTexture;
 
         public Texture2D BorderToggleButtonTexture;
 
@@ -100,6 +101,7 @@ namespace OverhauledOverworldTravel
             success &= modManager.TryGetAsset("1000x500_World_Height-Map", false, out WorldHeightMapTexture);
             success &= modManager.TryGetAsset("1000x500_Region_Borders_Map", false, out RegionBordersMapTexture);
             success &= modManager.TryGetAsset("1000x500_Region_Bitmap_Colors", false, out RegionBitmapColorTexture);
+            success &= modManager.TryGetAsset("1000x500_Unexplored_Map_Overlay", false, out UnexploredMapOverlayTexture);
             success &= modManager.TryGetAsset("Concept_Borders_Toggle_Icon_1", false, out BorderToggleButtonTexture);
 
             if (!success)

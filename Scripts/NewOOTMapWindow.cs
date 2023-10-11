@@ -57,6 +57,7 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
         Texture2D heightMapTexture;
         Texture2D regionBordersTexture;
         Texture2D regionBitmapColorsTexture;
+        Texture2D unexploredAreasMapTexture;
 
         Texture2D borderButtonTexture;
 
@@ -84,6 +85,7 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
         Color32[] fogOfWarPixelBuffer;
 
         Color32[] regionColorsBitmap;
+        Color32[] unexploredAreasColorMap;
 
         TextLabel regionLabel;
         TextLabel firstDebugLabel;
@@ -97,6 +99,8 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
         Vector2 zoomOffset = Vector2.zero;
         Vector2 lastMousePos = Vector2.zero;
         Vector2 lastClickedPos = Vector2.zero;
+
+        bool autoCenterViewOnPlayer = false;
 
         Color32[] locationPixelColors;
 
@@ -320,7 +324,11 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             Button testingUIButton9 = CreateGenericTextButton(new Rect(2, 159, 100, 50), rightButtonsPanel, (int)SoundClips.EnemyWraithAttack, "Fog of War", 3.0f);
             testingUIButton9.OnMouseClick += ToggleFogOfWar_OnMouseClick;
 
-            // Tomorrow maybe I'll try to get a toggle to work that "auto-centers" the map-view on the player, so the fog of war works better/is easier to click around with, also more fog of war work, will see.
+            // Testing Fifth UI Button in right panel
+            Button testingUIButton10 = CreateGenericTextButton(new Rect(2, 211, 100, 50), rightButtonsPanel, (int)SoundClips.EnemyScorpionAttack, "Auto Center On Player", 2.7f);
+            testingUIButton10.OnMouseClick += ToggleAutoCenterOnPlayer_OnMouseClick;
+
+            // Tomorrow maybe I'll try to play with the fog of war even more, try to get areas not explored for awhile to get a darker shadowed effect or something maybe? Like a low alpha color or something, will see.
 
             // Add region/location label
             regionLabel = DaggerfallUI.AddTextLabel(DaggerfallUI.LargeFont, new Vector2(0, 2), string.Empty, worldMapPanel);
@@ -342,6 +350,9 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
 
             // Setup Color array for determining what region the mouse cursor is currently hovering over
             regionColorsBitmap = regionBitmapColorsTexture.GetPixels32();
+
+            // Setup Color array for filling "unexplored" areas of the map with the overlay texture
+            unexploredAreasColorMap = unexploredAreasMapTexture.GetPixels32();
 
             // Zoom Out Button
             Button zoomOutButton = DaggerfallUI.AddButton(new Rect(0, 0, 0, 0), worldMapPanel);
@@ -456,6 +467,7 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             heightMapTexture = OOTMain.Instance.WorldHeightMapTexture;
             regionBordersTexture = OOTMain.Instance.RegionBordersMapTexture;
             regionBitmapColorsTexture = OOTMain.Instance.RegionBitmapColorTexture;
+            unexploredAreasMapTexture = OOTMain.Instance.UnexploredMapOverlayTexture;
 
             borderButtonTexture = OOTMain.Instance.BorderToggleButtonTexture;
         }
@@ -581,6 +593,11 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
                 TestWhereMouseCursorHitboxIsLocated(pixelBufferPos);
             }
 
+            if (autoCenterViewOnPlayer && currentZoom > 1)
+            {
+                ZoomMapTexture(true, false, false, true);
+            }    
+
             if (InputManager.Instance.GetMouseButtonUp(1))
             {
                 // Ensure clicks are inside map texture
@@ -663,7 +680,7 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             // Fills "fog of war" pixel buffer entirely with black, then later "chip away" this color to hopefully reduce overall operations, will see.
             for (int i = 0; i < fogOfWarPixelBuffer.Length; i++)
             {
-                fogOfWarPixelBuffer[i] = blackColor;
+                fogOfWarPixelBuffer[i] = unexploredAreasColorMap[i];
             }
 
             /*int dottedLineCounter = 0;
@@ -1634,6 +1651,14 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
                 fogOfWarOverlayPanel.Enabled = true;
             else
                 fogOfWarOverlayPanel.Enabled = false;
+        }
+
+        private void ToggleAutoCenterOnPlayer_OnMouseClick(BaseScreenComponent sender, Vector2 position)
+        {
+            if (autoCenterViewOnPlayer == false)
+                autoCenterViewOnPlayer = true;
+            else
+                autoCenterViewOnPlayer = false;
         }
 
         void VariousUsefulNotesAndMethods()

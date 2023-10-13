@@ -33,6 +33,7 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
         public static Color32 blueColor = new Color32(0, 0, 255, 255);
         public static Color32 blackColor = new Color32(0, 0, 0, 255);
         public static Color32 whiteColor = new Color32(255, 255, 255, 255);
+        public static Color32 dimBlackColor = new Color32(0, 0, 0, 62); // Likely make a setting for this, and many of the color values honestly, later on.
         public static Color32 emptyColor = new Color32(0, 0, 0, 0);
 
         public static Rect butt1 = new Rect(0, 0, 0, 0);
@@ -328,7 +329,13 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             Button testingUIButton10 = CreateGenericTextButton(new Rect(2, 211, 100, 50), rightButtonsPanel, (int)SoundClips.EnemyScorpionAttack, "Auto Center On Player", 2.7f);
             testingUIButton10.OnMouseClick += ToggleAutoCenterOnPlayer_OnMouseClick;
 
-            // Tomorrow maybe I'll try to play with the fog of war even more, try to get areas not explored for awhile to get a darker shadowed effect or something maybe? Like a low alpha color or something, will see.
+            // Tomorrow maybe I'll see about somehow getting the "explored/found" locations be a thing that only shows them when they are already known, rather than always like atm, will see.
+            // There really are a good few ways I can approach this. But I also have to keep in mind that keeping the "search" function is also going to be important, so yeah, going to take some thought overall.
+            // Should obviously check how the vanilla game/world map keeps track of "hidden" and non-hidden locations and in what data-type it does this.
+            // Keep in mind also that I may very likely rework the search function alot. So that the first thing you likely have to specify is the region you want to search in, not only the location name, etc.
+            // Might just make it easier on myself and just have the "undiscovered" layer determine what locations actually give the location name when moused over, that way I can just draw all the location
+            // dots one time, but still have the same effect in essense. The main issue with that case would be the searching thing, but I suppose I could just do similar and check if the locations with
+            // the searched name is in a DFPosition that is undiscovered on the unexploredAreas array, or something like that. Probably would be easier than actually flagging the locations as hidden and such.
 
             // Add region/location label
             regionLabel = DaggerfallUI.AddTextLabel(DaggerfallUI.LargeFont, new Vector2(0, 2), string.Empty, worldMapPanel);
@@ -683,6 +690,18 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
                 fogOfWarPixelBuffer[i] = unexploredAreasColorMap[i];
             }
 
+            // Dim out the previous revealed areas that the player detection radius is currently not in, using a low alpha value black for the "dimming" effect
+            for (int y = 0; y < height; y++)
+            {
+                for (int x = 0; x < width; x++)
+                {
+                    if (exploredPixelArray[x, y] == 1)
+                    {
+                        exploredPixelArray[x, y] = 2;
+                    }
+                }
+            }
+
             /*int dottedLineCounter = 0;
             foreach (DFPosition pixelPos in currentTravelLinePositionsList)
             {
@@ -749,7 +768,10 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
                         int flippedY = (int)(height - y - 1); // To compensate for the pixelBuffer index starting at the opposite part of the screen as the (0, 0) origin for the screen.
                         int pixelPos = (int)(flippedY * width + x);
 
-                        fogOfWarPixelBuffer[pixelPos] = emptyColor;
+                        if (exploredPixelArray[x, y] == 2)
+                            fogOfWarPixelBuffer[pixelPos] = dimBlackColor;
+                        else
+                            fogOfWarPixelBuffer[pixelPos] = emptyColor;
                     }
                 }
             }

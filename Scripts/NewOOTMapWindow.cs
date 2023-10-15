@@ -387,6 +387,7 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             mapClockText.TextScale = 3.00f;
             mapClockText.Text = clockDisplayString;
             mapClockText.TextColor = new Color(0f, 0f, 0f, 1f);
+            mapClockButton.Enabled = false; // For testing so I can see stuff better.
 
             // Stop Travel button
             stopTravelButton = DaggerfallUI.AddButton(new Rect(920, 440, 80, 30), worldMapPanel);
@@ -989,14 +990,20 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             int usedPosX = (int)((currentMousePos.x + (zoomOffset.x * currentZoom)) / currentZoom);
             int usedPosY = (int)((currentMousePos.y + (zoomOffset.y * currentZoom)) / currentZoom);
 
+            Vector2 refCoords = Vector2.zero; // For now, use to determine what "explored/unexplored" map pixel is being checked here.
+
             ContentReader.MapSummary mapSummary;
-            if (DaggerfallUnity.Instance.ContentReader.HasLocation(usedPosX, usedPosY, out mapSummary)) { }
-            else if (DaggerfallUnity.Instance.ContentReader.HasLocation(usedPosX, usedPosY - 1, out mapSummary)) { }
-            else if (DaggerfallUnity.Instance.ContentReader.HasLocation(usedPosX + 1, usedPosY - 1, out mapSummary)) { }
-            else { DaggerfallUnity.Instance.ContentReader.HasLocation(usedPosX + 1, usedPosY, out mapSummary); }
+            if (DaggerfallUnity.Instance.ContentReader.HasLocation(usedPosX, usedPosY, out mapSummary)) { refCoords.x = usedPosX; refCoords.y = usedPosY; }
+            else if (DaggerfallUnity.Instance.ContentReader.HasLocation(usedPosX, usedPosY - 1, out mapSummary)) { refCoords.x = usedPosX; refCoords.y = usedPosY - 1; }
+            else if (DaggerfallUnity.Instance.ContentReader.HasLocation(usedPosX + 1, usedPosY - 1, out mapSummary)) { refCoords.x = usedPosX + 1; refCoords.y = usedPosY - 1; }
+            else { DaggerfallUnity.Instance.ContentReader.HasLocation(usedPosX + 1, usedPosY, out mapSummary); refCoords.x = usedPosX + 1; refCoords.y = usedPosY; }
 
             string regionName = DaggerfallUnity.ContentReader.MapFileReader.GetRegionName(mapSummary.RegionIndex);
-            string locationName = GetLocationNameInCurrentRegion(mapSummary.RegionIndex, mapSummary.MapIndex);
+
+            string locationName = string.Empty;
+            if (fogOfWarOverlayPanel.Enabled == true && exploredPixelArray[(int)refCoords.x, (int)refCoords.y] == 0) { }
+            else { locationName = GetLocationNameInCurrentRegion(mapSummary.RegionIndex, mapSummary.MapIndex); }
+
             int mapPixelID = mapSummary.ID;
             if (locationName == string.Empty) // Keep label from showing up if no valid location is moused over. But do show region name if over a valid region Bitmap color value.
             {

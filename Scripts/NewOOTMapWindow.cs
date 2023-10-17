@@ -33,6 +33,7 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
         public static Color32 blueColor = new Color32(0, 0, 255, 255);
         public static Color32 blackColor = new Color32(0, 0, 0, 255);
         public static Color32 whiteColor = new Color32(255, 255, 255, 255);
+        public static Color32 dimRedColor = new Color32(255, 0, 0, 85);
         public static Color32 dimBlackColor = new Color32(0, 0, 0, 62); // Likely make a setting for this, and many of the color values honestly, later on.
         public static Color32 emptyColor = new Color32(0, 0, 0, 0);
 
@@ -85,8 +86,14 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
         Texture2D fogOfWarTexture;
         Color32[] fogOfWarPixelBuffer;
 
+        Panel searchHighlightOverlayPanel;
+        Texture2D searchHighlightTexture;
+        Color32[] searchHighlightPixelBuffer;
+
         Color32[] regionColorsBitmap;
         Color32[] unexploredAreasColorMap;
+
+        TextLabel regionSelectInfoLabel;
 
         TextLabel regionLabel;
         TextLabel firstDebugLabel;
@@ -108,6 +115,8 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
         Dictionary<string, Vector2> offsetLookup = new Dictionary<string, Vector2>();
 
         int[,] exploredPixelArray = new int[1000, 500];
+
+        bool regionSelectionMode = false;
 
         WorldTime worldTimer;
         DaggerfallDateTime dateTime;
@@ -281,6 +290,16 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             fogOfWarTexture = new Texture2D((int)rectWorldMap.width, (int)rectWorldMap.height, TextureFormat.ARGB32, false);
             fogOfWarTexture.filterMode = FilterMode.Point;
 
+            // Overlay for the search highlight panel
+            searchHighlightOverlayPanel = DaggerfallUI.AddPanel(rectWorldMap, worldMapPanel);
+            searchHighlightOverlayPanel.HorizontalAlignment = HorizontalAlignment.Center;
+            searchHighlightOverlayPanel.VerticalAlignment = VerticalAlignment.Middle;
+
+            // Setup pixel buffer and texture for search highlight area
+            searchHighlightPixelBuffer = new Color32[(int)rectWorldMap.width * (int)rectWorldMap.height];
+            searchHighlightTexture = new Texture2D((int)rectWorldMap.width, (int)rectWorldMap.height, TextureFormat.ARGB32, false);
+            searchHighlightTexture.filterMode = FilterMode.Point;
+
             // Panel housing the button bar on the left of the screen
             leftButtonsPanel = DaggerfallUI.AddPanel(new Rect(0, 125, 105, 265), worldMapPanel);
             leftButtonsPanel.BackgroundColor = new Color(0.9f, 0.1f, 0.5f, 0.75f); // For testing purposes
@@ -306,7 +325,7 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             testingUIButton5.OnMouseClick += ExitMapWindow_OnMouseClick;
 
             // Panel housing the button bar on the right of the screen
-            rightButtonsPanel = DaggerfallUI.AddPanel(new Rect(895, 125, 105, 265), worldMapPanel);
+            rightButtonsPanel = DaggerfallUI.AddPanel(new Rect(895, 125, 105, 317), worldMapPanel);
             rightButtonsPanel.BackgroundColor = new Color(0.9f, 0.1f, 0.5f, 0.75f); // For testing purposes
 
             // Testing First UI Button in right panel
@@ -328,6 +347,14 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             // Testing Fifth UI Button in right panel
             Button testingUIButton10 = CreateGenericTextButton(new Rect(2, 211, 100, 50), rightButtonsPanel, (int)SoundClips.EnemyScorpionAttack, "Auto Center On Player", 2.7f);
             testingUIButton10.OnMouseClick += ToggleAutoCenterOnPlayer_OnMouseClick;
+
+            // Testing Sixth UI Button in right panel
+            Button testingUIButton11 = CreateGenericTextButton(new Rect(2, 263, 100, 50), rightButtonsPanel, (int)SoundClips.EnemyDaedraLordBark, "Region Select Mode", 2.7f);
+            testingUIButton11.OnMouseClick += StartRegionSelectionMode_OnMouseClick;
+            regionSelectInfoLabel = DaggerfallUI.AddTextLabel(DaggerfallUI.LargeFont, new Vector2(0, 35), "Click On A Region You Want To Search Within", worldMapPanel);
+            regionSelectInfoLabel.HorizontalAlignment = HorizontalAlignment.Center;
+            regionSelectInfoLabel.TextScale = 2.0f;
+            regionSelectInfoLabel.Enabled = false;
 
             // Tomorrow maybe I'll see about somehow getting the "explored/found" locations be a thing that only shows them when they are already known, rather than always like atm, will see.
             // There really are a good few ways I can approach this. But I also have to keep in mind that keeping the "search" function is also going to be important, so yeah, going to take some thought overall.
@@ -489,6 +516,9 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             destinationPosition = TravelTimeCalculator.GetPlayerTravelPosition();
             currentTravelLinePositionsList = new List<DFPosition>();
             followingTravelLinePositionsList = new List<DFPosition>();
+
+            regionSelectionMode = false;
+
             isPlayerTraveling = false;
             mapTimeHasChanged = false;
 
@@ -502,6 +532,8 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
         public override void OnPop()
         {
             base.OnPop();
+
+            regionSelectionMode = false;
 
             isPlayerTraveling = false;
             mapTimeHasChanged = false;
@@ -569,6 +601,12 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
 
                     UpdatePlayerTravelDotsTexture();
                 }
+            }
+
+            if (regionSelectionMode)
+            {
+                // Tomorrow I'll see about having the actual "location search" prompt work when left-clicking on a valid region while "regionSelectionMode" is active and such, will see how it goes.
+                // code here
             }
 
             // Input handling
@@ -1005,12 +1043,11 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             else { locationName = GetLocationNameInCurrentRegion(mapSummary.RegionIndex, mapSummary.MapIndex); }
 
             int mapPixelID = mapSummary.ID;
+            int regionColorIndex = -1;
+            int flippedY = (int)(500 - usedPosY - 1); // To compensate for the pixelBuffer index starting at the opposite part of the screen as the (0, 0) origin for the screen.
+            int bitMapPos = (int)(flippedY * 1000 + usedPosX);
             if (locationName == string.Empty) // Keep label from showing up if no valid location is moused over. But do show region name if over a valid region Bitmap color value.
             {
-                int regionColorIndex = -1;
-                int flippedY = (int)(500 - usedPosY - 1); // To compensate for the pixelBuffer index starting at the opposite part of the screen as the (0, 0) origin for the screen.
-                int bitMapPos = (int)(flippedY * 1000 + usedPosX);
-
                 // Read from the "Red" color value for this part of the Bitmap texture color data to determine what region index value is used.
                 if (regionColorsBitmap[bitMapPos].r > 0) { regionColorIndex = regionColorsBitmap[bitMapPos].r - 1; }
                 else if (regionColorsBitmap[bitMapPos + 1].r > 0) { regionColorIndex = regionColorsBitmap[bitMapPos + 1].r - 1; }
@@ -1031,6 +1068,42 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             else
             {
                 regionLabel.Text = string.Format("{0} : {1} ({2})", regionName, locationName, mapPixelID);
+            }
+
+            // Just put this here for now, since it is a bit easier than a new method entirely, but will almost definitely move this later on.
+            searchHighlightOverlayPanel.Enabled = false;
+            regionSelectInfoLabel.Enabled = false;
+            if (regionSelectionMode)
+            {
+                Array.Clear(searchHighlightPixelBuffer, 0, searchHighlightPixelBuffer.Length);
+                searchHighlightOverlayPanel.Enabled = true;
+                regionSelectInfoLabel.Enabled = true;
+
+                if (regionColorsBitmap[bitMapPos].r > 0) { regionColorIndex = regionColorsBitmap[bitMapPos].r; }
+
+                if ((bitMapPos >= 0 || bitMapPos < regionColorsBitmap.Length) && (regionColorIndex >= 0 || regionColorIndex < DaggerfallUnity.Instance.ContentReader.MapFileReader.RegionCount))
+                {
+                    for (int y = 0; y < 500; y++)
+                    {
+                        for (int x = 0; x < 1000; x++)
+                        {
+                            int flipY = (int)(500 - y - 1); // To compensate for the pixelBuffer index starting at the opposite part of the screen as the (0, 0) origin for the screen.
+                            int pixelPos = (int)(flipY * 1000 + x);
+
+                            if (regionColorsBitmap[pixelPos].r == regionColorIndex)
+                            {
+                                searchHighlightPixelBuffer[pixelPos] = dimRedColor;
+                            }
+                        }
+                    }
+                }
+
+                // Apply updated color array to texture
+                searchHighlightTexture.SetPixels32(searchHighlightPixelBuffer);
+                searchHighlightTexture.Apply();
+
+                // Present texture
+                searchHighlightOverlayPanel.BackgroundTexture = searchHighlightTexture;
             }
         }
 
@@ -1081,6 +1154,7 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
                 travelPathOverlayPanel.BackgroundTextureLayout = BackgroundLayout.StretchToFill;
                 mouseCursorHitboxOverlayPanel.BackgroundTextureLayout = BackgroundLayout.StretchToFill;
                 fogOfWarOverlayPanel.BackgroundTextureLayout = BackgroundLayout.StretchToFill;
+                searchHighlightOverlayPanel.BackgroundTextureLayout = BackgroundLayout.StretchToFill;
 
                 if (zoomIn)
                 {
@@ -1148,6 +1222,8 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             mouseCursorHitboxOverlayPanel.BackgroundCroppedRect = worldMapNewRect;
             fogOfWarOverlayPanel.BackgroundTextureLayout = BackgroundLayout.Cropped;
             fogOfWarOverlayPanel.BackgroundCroppedRect = worldMapNewRect;
+            searchHighlightOverlayPanel.BackgroundTextureLayout = BackgroundLayout.Cropped;
+            searchHighlightOverlayPanel.BackgroundCroppedRect = worldMapNewRect;
         }
 
         void TestPlacingDaggerfallLocationDots()
@@ -1688,6 +1764,14 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
                 autoCenterViewOnPlayer = true;
             else
                 autoCenterViewOnPlayer = false;
+        }
+
+        private void StartRegionSelectionMode_OnMouseClick(BaseScreenComponent sender, Vector2 position)
+        {
+            if (regionSelectionMode == false)
+                regionSelectionMode = true;
+            else
+                regionSelectionMode = false;
         }
 
         void VariousUsefulNotesAndMethods()

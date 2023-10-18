@@ -603,12 +603,6 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
                 }
             }
 
-            if (regionSelectionMode)
-            {
-                // Tomorrow I'll see about having the actual "location search" prompt work when left-clicking on a valid region while "regionSelectionMode" is active and such, will see how it goes.
-                // code here
-            }
-
             // Input handling
             HotkeySequence.KeyModifiers keyModifiers = HotkeySequence.GetKeyboardKeyModifiers();
             Vector2 currentMousePos = Vector2.zero;
@@ -693,6 +687,24 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             // Ignore clicks that are within the screen-space that these buttons occupy while a region is selected. Needed to use "sender.MousePosition" due to the "position" being post-scaling value.
             if ((leftButtonsPanel.Rectangle.Contains(sender.MousePosition) && leftButtonsPanel.Enabled == true) || rightButtonsPanel.Rectangle.Contains(sender.MousePosition) && rightButtonsPanel.Enabled == true)
                 return;
+
+            if (regionSelectionMode)
+            {
+                int usedPosX = (int)((position.x + (zoomOffset.x * currentZoom)) / currentZoom);
+                int usedPosY = (int)((position.y + (zoomOffset.y * currentZoom)) / currentZoom);
+                int regionColorIndex = -1;
+                int flippedY = (int)(500 - usedPosY - 1); // To compensate for the pixelBuffer index starting at the opposite part of the screen as the (0, 0) origin for the screen.
+                int bitMapPos = (int)(flippedY * 1000 + usedPosX);
+
+                if (regionColorsBitmap[bitMapPos].r > 0) { regionColorIndex = regionColorsBitmap[bitMapPos].r - 1; }
+
+                if ((bitMapPos >= 0 || bitMapPos < regionColorsBitmap.Length) && (regionColorIndex >= 0 || regionColorIndex < DaggerfallUnity.Instance.ContentReader.MapFileReader.RegionCount))
+                {
+                    string regionName = DaggerfallUnity.ContentReader.MapFileReader.GetRegionName(regionColorIndex);
+                    PromptLocationSearch(regionColorIndex, regionName);
+                }
+                // code here
+            }
 
             //EndPos = new DFPosition((int)position.x, (int)position.y);
             EndPos = new DFPosition((int)((position.x + (zoomOffset.x * currentZoom)) / currentZoom), (int)((position.y + (zoomOffset.y * currentZoom)) / currentZoom));
@@ -1298,6 +1310,103 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
 
             // Present texture
             mouseCursorHitboxOverlayPanel.BackgroundTexture = mouseCursorHitboxTexture;
+        }
+
+        public void PromptLocationSearch(int regionIndex, string regionName)
+        {
+            // Open location search pop-up
+            string searchPopUpText = "Enter Name Of Location Within, " + regionName + " : ";
+            DaggerfallUI.Instance.PlayOneShot(SoundClips.ButtonClick);
+            if (regionIndex >= 0 || regionIndex < DaggerfallUnity.Instance.ContentReader.MapFileReader.RegionCount)
+            {
+                // Check if region clicked has any locations that the player knows of, I.E. the fog of war is not hiding them, if it is enabled atleast.
+                if (fogOfWarOverlayPanel.Enabled == true && CheckRegionForKnownLocations(regionIndex))
+                {
+                    DaggerfallInputMessageBox searchPopUp = new DaggerfallInputMessageBox(uiManager, null, 31, searchPopUpText, true, this);
+                    searchPopUp.TextPanelDistanceY = 5;
+                    searchPopUp.TextBox.WidthOverride = 308;
+                    searchPopUp.TextBox.MaxCharacters = 32;
+                    searchPopUp.OnGotUserInput += HandleSearchLocationEvent;
+                    searchPopUp.Show();
+                }
+                else if (CheckRegionForKnownLocations(regionIndex))
+                {
+                    DaggerfallInputMessageBox searchPopUp = new DaggerfallInputMessageBox(uiManager, null, 31, searchPopUpText, true, this);
+                    searchPopUp.TextPanelDistanceY = 5;
+                    searchPopUp.TextBox.WidthOverride = 308;
+                    searchPopUp.TextBox.MaxCharacters = 32;
+                    searchPopUp.OnGotUserInput += HandleSearchLocationEvent;
+                    searchPopUp.Show();
+                }
+                else
+                {
+                    DaggerfallMessageBox invalidRegionPopup = new DaggerfallMessageBox(uiManager, this);
+                    invalidRegionPopup.SetText("You Don't Know Any Locations In That Region, Or They Don't Exist.");
+                    invalidRegionPopup.Show();
+                    invalidRegionPopup.ClickAnywhereToClose = true;
+                }
+            }
+            else
+            {
+                DaggerfallMessageBox invalidRegionPopup = new DaggerfallMessageBox(uiManager, this);
+                invalidRegionPopup.SetText("Error: That Region Does Not Exist");
+                invalidRegionPopup.Show();
+                invalidRegionPopup.ClickAnywhereToClose = true;
+            }
+        }
+
+        // Handles events from Find Location pop-up.
+        public void HandleSearchLocationEvent(DaggerfallInputMessageBox inputMessageBox, string locationName)
+        {
+            // Tomorrow likely try to get this search prompt part working, and filtering out locations that are "hidden" by fog of war if it is active, stuff like that, clean-up and testing as well, etc.
+            List<DistanceMatch> matching;
+            if (FindLocation(locationName, out matching))
+            {
+                if (matching.Count == 1)
+                { //place flashing crosshair over location
+                    locationSelected = true;
+                    findingLocation = true;
+                    StartIdentify();
+                    UpdateCrosshair();
+                }
+                else
+                {
+                    ShowLocationPicker(matching.ConvertAll(match => match.text).ToArray(), false);
+                }
+            }
+            else
+            {
+                TextFile.Token[] textTokens = DaggerfallUnity.Instance.TextProvider.GetRSCTokens(13);
+                DaggerfallMessageBox messageBox = new DaggerfallMessageBox(uiManager, this);
+                messageBox.SetTextTokens(textTokens);
+                messageBox.ClickAnywhereToClose = true;
+                uiManager.PushWindow(messageBox);
+                return;
+            }
+        }
+
+        public bool CheckRegionForKnownLocations(int regionIndex)
+        {
+            List<int> validLocationsList = new List<int>();
+            DFRegion regionData = DaggerfallUnity.Instance.ContentReader.MapFileReader.GetRegion(regionIndex);
+            if (regionData.LocationCount <= 0) { return false; }
+            if (regionIndex == 31) { return false; } // Index for "High Rock sea coast" or the "region" that holds the location of the two player boats, as well as the Mantellan Crux story dungeon.
+
+            // Collect all valid locations within this region
+            for (int i = 0; i < regionData.LocationCount; i++)
+            {
+                // Later on will likely want to add more logic depending on various settings/factors. Such as having the fog of war off, but also still have "undiscovered" locations like covens and such, etc.
+                if (fogOfWarOverlayPanel.Enabled == true)
+                {
+                    DFPosition locPos = MapsFile.LongitudeLatitudeToMapPixel(regionData.MapTable[i].Longitude, regionData.MapTable[i].Latitude);
+
+                    if (exploredPixelArray[locPos.X, locPos.Y] == 0) { continue; }
+                }
+                validLocationsList.Add(i);
+            }
+
+            if (validLocationsList.Count > 0) { return true; }
+            else { return false; }
         }
 
         public void DrawPlayerCrosshair(int width, int height, Color32 pathColor, ref Color32[] pixelBuffer)

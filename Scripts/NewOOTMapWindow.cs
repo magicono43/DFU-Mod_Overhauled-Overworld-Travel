@@ -90,6 +90,10 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
         Texture2D searchHighlightTexture;
         Color32[] searchHighlightPixelBuffer;
 
+        Panel searchCrosshairOverlayPanel;
+        Texture2D searchCrosshairTexture;
+        Color32[] searchCrosshairPixelBuffer;
+
         Color32[] regionColorsBitmap;
         Color32[] unexploredAreasColorMap;
 
@@ -117,6 +121,7 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
         int[,] exploredPixelArray = new int[1000, 500];
 
         bool regionSelectionMode = false;
+        bool markSearchedLocation = false;
 
         WorldTime worldTimer;
         DaggerfallDateTime dateTime;
@@ -155,6 +160,13 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
 
         DFPosition endPos = new DFPosition(109, 158);
         public DFPosition EndPos { get { return endPos; } protected internal set { endPos = value; } }
+
+        // Location Search Related Variables
+        private ContentReader.MapSummary locationSummary;
+        private int regionSearchedIndex = -1;
+        private int maxMatchingResults = 1000;
+        private string distanceRegionName = null;
+        private IDistance distance;
 
         public static Vector2 GetWorldMapPanelSize()
         {
@@ -248,6 +260,16 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             regionBordersOverlayPanel.BackgroundColor = ScreenDimColor;
             regionBordersOverlayPanel.BackgroundTexture = regionBordersTexture;
             regionBordersOverlayPanel.Enabled = false;
+
+            // Overlay for the search crosshair panel
+            searchCrosshairOverlayPanel = DaggerfallUI.AddPanel(rectWorldMap, worldMapPanel);
+            searchCrosshairOverlayPanel.HorizontalAlignment = HorizontalAlignment.Center;
+            searchCrosshairOverlayPanel.VerticalAlignment = VerticalAlignment.Middle;
+
+            // Setup pixel buffer and texture for search crosshair
+            searchCrosshairPixelBuffer = new Color32[(int)rectWorldMap.width * (int)rectWorldMap.height];
+            searchCrosshairTexture = new Texture2D((int)rectWorldMap.width, (int)rectWorldMap.height, TextureFormat.ARGB32, false);
+            searchCrosshairTexture.filterMode = FilterMode.Point;
 
             // Overlay for the player travel path panel
             travelPathOverlayPanel = DaggerfallUI.AddPanel(rectWorldMap, worldMapPanel); // May have to make the Parent panel this panel's parent similar to the worldMapPanel, will see.
@@ -356,7 +378,8 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             regionSelectInfoLabel.TextScale = 2.0f;
             regionSelectInfoLabel.Enabled = false;
 
-            // Tomorrow maybe I'll see about somehow getting the "explored/found" locations be a thing that only shows them when they are already known, rather than always like atm, will see.
+            // Tomorrow maybe I should consider working on the basic save-data aspect of this mod, thus far atleast, such as for saving and loading the fog of war discovered values and such, will see.
+            // I'll see about somehow getting the "explored/found" locations be a thing that only shows them when they are already known, rather than always like atm, will see.
             // There really are a good few ways I can approach this. But I also have to keep in mind that keeping the "search" function is also going to be important, so yeah, going to take some thought overall.
             // Should obviously check how the vanilla game/world map keeps track of "hidden" and non-hidden locations and in what data-type it does this.
             // Keep in mind also that I may very likely rework the search function alot. So that the first thing you likely have to specify is the region you want to search in, not only the location name, etc.
@@ -518,6 +541,7 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             followingTravelLinePositionsList = new List<DFPosition>();
 
             regionSelectionMode = false;
+            markSearchedLocation = false;
 
             isPlayerTraveling = false;
             mapTimeHasChanged = false;
@@ -703,30 +727,30 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
                     string regionName = DaggerfallUnity.ContentReader.MapFileReader.GetRegionName(regionColorIndex);
                     PromptLocationSearch(regionColorIndex, regionName);
                 }
-                // code here
             }
-
-            //EndPos = new DFPosition((int)position.x, (int)position.y);
-            EndPos = new DFPosition((int)((position.x + (zoomOffset.x * currentZoom)) / currentZoom), (int)((position.y + (zoomOffset.y * currentZoom)) / currentZoom));
-
-            destinationPosition = EndPos;
-            currentTravelLinePositionsList = FindPixelsBetweenPlayerAndDest();
-            if (currentTravelLinePositionsList.Count > 0)
+            else
             {
-                nextPlayerPosition.Y = currentTravelLinePositionsList[0].Y;
-                nextPlayerPosition.X = currentTravelLinePositionsList[0].X;
-                dateTimeInSeconds += 25;
-                mapTimeHasChanged = true;
+                EndPos = new DFPosition((int)((position.x + (zoomOffset.x * currentZoom)) / currentZoom), (int)((position.y + (zoomOffset.y * currentZoom)) / currentZoom));
+
+                destinationPosition = EndPos;
+                currentTravelLinePositionsList = FindPixelsBetweenPlayerAndDest();
+                if (currentTravelLinePositionsList.Count > 0)
+                {
+                    nextPlayerPosition.Y = currentTravelLinePositionsList[0].Y;
+                    nextPlayerPosition.X = currentTravelLinePositionsList[0].X;
+                    dateTimeInSeconds += 25;
+                    mapTimeHasChanged = true;
+                }
+
+                // Play distinct sound just for testing right now.
+                DaggerfallUI.Instance.PlayOneShot(DaggerfallUI.Instance.GetAudioClip(SoundClips.PageTurn));
+
+                Vector2 clickedPos = sender.ScaledMousePosition;
+                lastClickedPos = clickedPos;
+                Debug.LogFormat("Clicked This Spot: x:{0} y:{1}", clickedPos.x, clickedPos.y);
+
+                UpdatePlayerTravelDotsTexture();
             }
-
-            // Play distinct sound just for testing right now.
-            DaggerfallUI.Instance.PlayOneShot(DaggerfallUI.Instance.GetAudioClip(SoundClips.PageTurn));
-
-            Vector2 clickedPos = sender.ScaledMousePosition;
-            lastClickedPos = clickedPos;
-            Debug.LogFormat("Clicked This Spot: x:{0} y:{1}", clickedPos.x, clickedPos.y);
-
-            UpdatePlayerTravelDotsTexture();
         }
 
         void UpdatePlayerTravelDotsTexture()
@@ -836,6 +860,26 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             // Present texture
             travelPathOverlayPanel.BackgroundTexture = travelPathTexture;
             fogOfWarOverlayPanel.BackgroundTexture = fogOfWarTexture;
+        }
+
+        void UpdateLocationSearchCrosshairTexture(DFPosition locPos = null)
+        {
+            int width = 1000;
+            int height = 500;
+            Array.Clear(searchCrosshairPixelBuffer, 0, searchCrosshairPixelBuffer.Length);
+
+            if (markSearchedLocation && locPos != null)
+            {
+                // Draw crosshair to appear on the location pixel that was just searched and found
+                DrawSearchedLocationCrosshair(locPos, width, height, redColor, ref searchCrosshairPixelBuffer);
+            }
+
+            // Apply updated color array to texture
+            searchCrosshairTexture.SetPixels32(searchCrosshairPixelBuffer);
+            searchCrosshairTexture.Apply();
+
+            // Present texture
+            searchCrosshairOverlayPanel.BackgroundTexture = searchCrosshairTexture;
         }
 
         public List<DFPosition> FindPixelsBetweenPlayerAndDest()
@@ -1160,13 +1204,7 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             }
             else
             {
-                worldMapPanel.BackgroundTextureLayout = BackgroundLayout.StretchToFill;
-                regionBordersOverlayPanel.BackgroundTextureLayout = BackgroundLayout.StretchToFill;
-                locationDotOverlayPanel.BackgroundTextureLayout = BackgroundLayout.StretchToFill;
-                travelPathOverlayPanel.BackgroundTextureLayout = BackgroundLayout.StretchToFill;
-                mouseCursorHitboxOverlayPanel.BackgroundTextureLayout = BackgroundLayout.StretchToFill;
-                fogOfWarOverlayPanel.BackgroundTextureLayout = BackgroundLayout.StretchToFill;
-                searchHighlightOverlayPanel.BackgroundTextureLayout = BackgroundLayout.StretchToFill;
+                StretchToFillMainTextures();
 
                 if (zoomIn)
                 {
@@ -1222,6 +1260,59 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
 
             // Set cropped area in location dots panel - always at classic dimensions
             Rect worldMapNewRect = new Rect(startX, startY, width / zoomFactor, height / zoomFactor);
+            CropAndResizeMainTextures(worldMapNewRect);
+        }
+
+        void FocusOnMapPixel(DFPosition locPos)
+        {
+            int zoomPosX = locPos.X;
+            int zoomPosY = locPos.Y;
+            int zoomFactor = 5; // Default value zoom factor will be set to when "focusing in" on a location, primarily by the search location function.
+            currentZoom = zoomFactor;
+
+            StretchToFillMainTextures();
+
+            DaggerfallUI.Instance.PlayOneShot(DaggerfallUI.Instance.GetAudioClip(SoundClips.AmbientWindBlow1));
+
+            // Center cropped portion over mouse using classic dimensions
+            int width = 1000;
+            int height = 500;
+            int zoomWidth = width / (zoomFactor * 2);
+            int zoomHeight = height / (zoomFactor * 2);
+            int startX = zoomPosX - zoomWidth;
+            int startY = height + (-zoomPosY - zoomHeight);
+
+            // Clamp to edges
+            if (startX < 0)
+                startX = 0;
+            else if (startX + width / zoomFactor >= width)
+                startX = width - width / zoomFactor;
+            if (startY < 0)
+                startY = 0;
+            else if (startY + height / zoomFactor >= height)
+                startY = height - height / zoomFactor;
+
+            zoomOffset = new Vector2(startX, Mathf.Abs(startY - height) - (height / zoomFactor));
+
+            // Set cropped area in location dots panel - always at classic dimensions
+            Rect worldMapNewRect = new Rect(startX, startY, width / zoomFactor, height / zoomFactor);
+            CropAndResizeMainTextures(worldMapNewRect);
+        }
+
+        void StretchToFillMainTextures()
+        {
+            worldMapPanel.BackgroundTextureLayout = BackgroundLayout.StretchToFill;
+            regionBordersOverlayPanel.BackgroundTextureLayout = BackgroundLayout.StretchToFill;
+            locationDotOverlayPanel.BackgroundTextureLayout = BackgroundLayout.StretchToFill;
+            travelPathOverlayPanel.BackgroundTextureLayout = BackgroundLayout.StretchToFill;
+            mouseCursorHitboxOverlayPanel.BackgroundTextureLayout = BackgroundLayout.StretchToFill;
+            fogOfWarOverlayPanel.BackgroundTextureLayout = BackgroundLayout.StretchToFill;
+            searchHighlightOverlayPanel.BackgroundTextureLayout = BackgroundLayout.StretchToFill;
+            searchCrosshairOverlayPanel.BackgroundTextureLayout = BackgroundLayout.StretchToFill;
+        }
+
+        void CropAndResizeMainTextures(Rect worldMapNewRect)
+        {
             worldMapPanel.BackgroundTextureLayout = BackgroundLayout.Cropped;
             worldMapPanel.BackgroundCroppedRect = worldMapNewRect;
             regionBordersOverlayPanel.BackgroundTextureLayout = BackgroundLayout.Cropped;
@@ -1236,6 +1327,8 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             fogOfWarOverlayPanel.BackgroundCroppedRect = worldMapNewRect;
             searchHighlightOverlayPanel.BackgroundTextureLayout = BackgroundLayout.Cropped;
             searchHighlightOverlayPanel.BackgroundCroppedRect = worldMapNewRect;
+            searchCrosshairOverlayPanel.BackgroundTextureLayout = BackgroundLayout.Cropped;
+            searchCrosshairOverlayPanel.BackgroundCroppedRect = worldMapNewRect;
         }
 
         void TestPlacingDaggerfallLocationDots()
@@ -1315,6 +1408,7 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
         public void PromptLocationSearch(int regionIndex, string regionName)
         {
             // Open location search pop-up
+            regionSearchedIndex = -1;
             string searchPopUpText = "Enter Name Of Location Within, " + regionName + " : ";
             DaggerfallUI.Instance.PlayOneShot(SoundClips.ButtonClick);
             if (regionIndex >= 0 || regionIndex < DaggerfallUnity.Instance.ContentReader.MapFileReader.RegionCount)
@@ -1322,6 +1416,7 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
                 // Check if region clicked has any locations that the player knows of, I.E. the fog of war is not hiding them, if it is enabled atleast.
                 if (fogOfWarOverlayPanel.Enabled == true && CheckRegionForKnownLocations(regionIndex))
                 {
+                    regionSearchedIndex = regionIndex;
                     DaggerfallInputMessageBox searchPopUp = new DaggerfallInputMessageBox(uiManager, null, 31, searchPopUpText, true, this);
                     searchPopUp.TextPanelDistanceY = 5;
                     searchPopUp.TextBox.WidthOverride = 308;
@@ -1331,6 +1426,7 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
                 }
                 else if (CheckRegionForKnownLocations(regionIndex))
                 {
+                    regionSearchedIndex = regionIndex;
                     DaggerfallInputMessageBox searchPopUp = new DaggerfallInputMessageBox(uiManager, null, 31, searchPopUpText, true, this);
                     searchPopUp.TextPanelDistanceY = 5;
                     searchPopUp.TextBox.WidthOverride = 308;
@@ -1358,16 +1454,22 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
         // Handles events from Find Location pop-up.
         public void HandleSearchLocationEvent(DaggerfallInputMessageBox inputMessageBox, string locationName)
         {
-            // Tomorrow likely try to get this search prompt part working, and filtering out locations that are "hidden" by fog of war if it is active, stuff like that, clean-up and testing as well, etc.
             List<DistanceMatch> matching;
-            if (FindLocation(locationName, out matching))
+            if (SearchForLocation(locationName, out matching))
             {
                 if (matching.Count == 1)
-                { //place flashing crosshair over location
+                {
+                    FocusOnMapPixel(MapsFile.GetPixelFromPixelID(locationSummary.ID));
+                    regionSelectionMode = false;
+                    markSearchedLocation = true;
+                    autoCenterViewOnPlayer = false;
+                    UpdateLocationSearchCrosshairTexture(MapsFile.GetPixelFromPixelID(locationSummary.ID));
+                    /*
                     locationSelected = true;
                     findingLocation = true;
                     StartIdentify();
                     UpdateCrosshair();
+                    */
                 }
                 else
                 {
@@ -1376,13 +1478,77 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             }
             else
             {
-                TextFile.Token[] textTokens = DaggerfallUnity.Instance.TextProvider.GetRSCTokens(13);
-                DaggerfallMessageBox messageBox = new DaggerfallMessageBox(uiManager, this);
-                messageBox.SetTextTokens(textTokens);
-                messageBox.ClickAnywhereToClose = true;
-                uiManager.PushWindow(messageBox);
+                DaggerfallMessageBox invalidSearchPopup = new DaggerfallMessageBox(uiManager, this);
+                invalidSearchPopup.SetText("Can't Find Any Locations Matching That Search.");
+                invalidSearchPopup.Show();
+                invalidSearchPopup.ClickAnywhereToClose = true;
                 return;
             }
+        }
+
+        // Find location by name
+        public bool SearchForLocation(string name, out List<DistanceMatch> matching)
+        {
+            matching = new List<DistanceMatch>();
+            if (string.IsNullOrEmpty(name) || regionSearchedIndex <= -1)
+            {
+                return false;
+            }
+
+            DFRegion currentDFRegion = DaggerfallUnity.Instance.ContentReader.MapFileReader.GetRegion(regionSearchedIndex);
+
+            if (distanceRegionName != currentDFRegion.Name)
+            {
+                distanceRegionName = currentDFRegion.Name;
+                distance = DaggerfallDistance.GetDistance();
+                distance.SetDictionary(currentDFRegion.MapNames);
+            }
+
+            DistanceMatch[] bestMatches = distance.FindBestMatches(name, maxMatchingResults);
+
+            // Check if selected locations actually exist/are visible
+            MatchesCutOff cutoff = null;
+            ContentReader.MapSummary findLocationSummary;
+
+            foreach (DistanceMatch match in bestMatches)
+            {
+                if (!currentDFRegion.MapNameLookup.ContainsKey(match.text))
+                {
+                    DaggerfallUnity.LogMessage("Error: location name key not found in Region MapNameLookup dictionary");
+                    continue;
+                }
+                int index = currentDFRegion.MapNameLookup[match.text];
+                DFRegion.RegionMapTable locationInfo = currentDFRegion.MapTable[index];
+                DFPosition pos = MapsFile.LongitudeLatitudeToMapPixel((int)locationInfo.Longitude, (int)locationInfo.Latitude);
+                if (DaggerfallUnity.ContentReader.HasLocation(pos.X, pos.Y, out findLocationSummary))
+                {
+                    // Later on will likely want to add more logic depending on various settings/factors. Such as having the fog of war off, but also still have "undiscovered" locations like covens and such, etc.
+                    if (fogOfWarOverlayPanel.Enabled == true)
+                    {
+                        if (exploredPixelArray[pos.X, pos.Y] == 0) { continue; }
+                    }
+
+                    // only make location searchable if it is already discovered
+                    //if (!checkLocationDiscovered(findLocationSummary))
+                    //continue;
+
+                    if (cutoff == null)
+                    {
+                        cutoff = new MatchesCutOff(match.relevance);
+
+                        // Set locationSummary to first result's MapSummary in case we skip the location list picker step
+                        locationSummary = findLocationSummary;
+                    }
+                    else
+                    {
+                        if (!cutoff.Keep(match.relevance))
+                            break;
+                    }
+                    matching.Add(match);
+                }
+            }
+
+            return matching.Count > 0;
         }
 
         public bool CheckRegionForKnownLocations(int regionIndex)
@@ -1479,6 +1645,29 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             //for (int i = -3; i < 3; i++) { pixelBuffer[pixelPos + (width * i) - 1] = pathColor; }
         }
 
+        // Would like to make this a bit more "fancy" looking at some point, right now just super basic large plus sign to get the point across.
+        public void DrawSearchedLocationCrosshair(DFPosition locPos, int width, int height, Color32 pathColor, ref Color32[] pixelBuffer)
+        {
+            int flippedY = (int)(height - locPos.Y - 1); // To compensate for the pixelBuffer index starting at the opposite part of the screen as the (0, 0) origin for the screen.
+            int pixelPos = (int)(flippedY * width + locPos.X);
+
+            for (int i = -5; i < 6; i++)
+            {
+                if (pixelPos + i < 0 || pixelPos + i > pixelBuffer.Length)
+                    continue;
+                else
+                    pixelBuffer[pixelPos + i] = pathColor;
+            }
+
+            for (int i = -5; i < 6; i++)
+            {
+                if (pixelPos + (width * i) < 0 || pixelPos + (width * i) > pixelBuffer.Length)
+                    continue;
+                else
+                    pixelBuffer[pixelPos + (width * i)] = pathColor;
+            }
+        }
+
         public void DrawFogOfWar(DFPosition fogPos, int width, int height, Color32 pathColor, ref Color32[] pixelBuffer)
         {
             int flippedY = (int)(height - fogPos.Y - 1); // To compensate for the pixelBuffer index starting at the opposite part of the screen as the (0, 0) origin for the screen.
@@ -1495,6 +1684,24 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             pixelBuffer[pixelPos + width] = whiteColor;
             pixelBuffer[pixelPos + width + 1] = whiteColor;
             */
+        }
+
+        // Just straight copy/pasted from "DaggerfallTravelMapWindow.cs" code, because I really have not much clue how this works.
+        private class MatchesCutOff
+        {
+            private readonly float threshold;
+
+            public MatchesCutOff(float bestRelevance)
+            {
+                // If perfect match exists, return all perfect matches only
+                // Normally there should be only one perfect match, but if string canonization generates collisions that's no longer guaranteed
+                threshold = bestRelevance == 1f ? 1f : bestRelevance * 0.5f;
+            }
+
+            public bool Keep(float relevance)
+            {
+                return relevance >= threshold;
+            }
         }
 
         // Get index to locationPixelColor array or -1 if invalid or filtered
@@ -1791,6 +1998,41 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             }
         }*/
 
+        // Creates a ListPickerWindow with a list of locations from current region
+        // Locations displayed will be filtered out depending on the dungeon / town / temple / home button settings
+        private void ShowLocationPicker(string[] locations, bool applyFilters)
+        {
+            DaggerfallListPickerWindow locationPicker = new DaggerfallListPickerWindow(uiManager, this);
+            locationPicker.OnItemPicked += HandleLocationPickEvent;
+            locationPicker.ListBox.MaxCharacters = 29;
+
+            for (int i = 0; i < locations.Length; i++)
+            {
+                // Eventually having buttons to show/toggle different types of locations would be nice, just like the vanilla map, will see eventually.
+                /*
+                if (applyFilters)
+                {
+                    int index = currentDFRegion.MapNameLookup[locations[i]];
+                    if (GetPixelColorIndex(currentDFRegion.MapTable[index].LocationType) == -1)
+                        continue;
+                }
+                */
+                locationPicker.ListBox.AddItem(locations[i]);
+            }
+
+            uiManager.PushWindow(locationPicker);
+        }
+
+        public void HandleLocationPickEvent(int index, string locationName)
+        {
+            DFRegion regionData = DaggerfallUnity.Instance.ContentReader.MapFileReader.GetRegion(regionSearchedIndex);
+            if (regionData.LocationCount < 1)
+                return;
+
+            CloseWindow();
+            HandleSearchLocationEvent(null, locationName);
+        }
+
         private void ToggleLeftPanel_OnMouseClick(BaseScreenComponent sender, Vector2 position)
         {
             if (leftButtonsPanel.Enabled == true)
@@ -1878,7 +2120,11 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
         private void StartRegionSelectionMode_OnMouseClick(BaseScreenComponent sender, Vector2 position)
         {
             if (regionSelectionMode == false)
+            {
                 regionSelectionMode = true;
+                markSearchedLocation = false; // Doing this here, but later will likely have some better way to remove the "marked" locations crosshair from searching a location, will see later on.
+                UpdateLocationSearchCrosshairTexture();
+            }
             else
                 regionSelectionMode = false;
         }

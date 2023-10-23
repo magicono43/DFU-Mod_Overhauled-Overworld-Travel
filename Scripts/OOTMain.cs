@@ -3,7 +3,7 @@
 // License:         MIT License (http://www.opensource.org/licenses/mit-license.php)
 // Author:          Kirk.O
 // Created On: 	    8/3/2023, 8:40 PM
-// Last Edit:		10/21/2023, 10:40 PM
+// Last Edit:		10/22/2023, 9:50 PM
 // Version:			1.00
 // Special Thanks:  
 // Modifier:
@@ -22,7 +22,7 @@ namespace OverhauledOverworldTravel
     public partial class OOTMain : MonoBehaviour
     {
         public static OOTMain Instance;
-        //public static OOTSaveData ModSaveData = new OOTSaveData();
+        public static OOTSaveData ModSaveData = new OOTSaveData();
 
         static Mod mod;
 
@@ -33,6 +33,8 @@ namespace OverhauledOverworldTravel
         public static bool ClimatesAndCaloriesCheck { get; set; }
 
         // Global Variables
+        int[,] exploredPixelArray = new int[1000, 500];
+        public int[,] ExploredPixelValues { get { return exploredPixelArray; } set { exploredPixelArray = value; } }
         public static PlayerEntity Player { get { return GameManager.Instance.PlayerEntity; } }
 
         // Mod Textures || GUI
@@ -63,7 +65,7 @@ namespace OverhauledOverworldTravel
 
             Instance = this;
 
-            //mod.SaveDataInterface = ModSaveData;
+            mod.SaveDataInterface = ModSaveData;
 
             mod.LoadSettings();
 
@@ -76,6 +78,15 @@ namespace OverhauledOverworldTravel
             //LoadAudio();
 
             RegisterOOTCommands();
+
+            // Fill "fog of war" tracking array with empty values initially
+            for (int x = 0; x < 1000; x++)
+            {
+                for (int y = 0; y < 500; y++)
+                {
+                    exploredPixelArray[x, y] = 0; // Set the initial value for each pixel
+                }
+            }
 
             Debug.Log("Finished mod init: Overhauled Overworld Travel");
         }

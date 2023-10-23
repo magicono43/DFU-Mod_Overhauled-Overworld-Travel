@@ -211,14 +211,8 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
                 new Color32(colors.GetRed(37), colors.GetGreen(37), colors.GetBlue(37), 255),     //village (R155, G105, B106)
             };
 
-            // Fill "fog of war" tracking array with empty values initially
-            for (int x = 0; x < 1000; x++)
-            {
-                for (int y = 0; y < 500; y++)
-                {
-                    exploredPixelArray[x, y] = 0; // Set the initial value for each pixel
-                }
-            }
+            // Make a "clone" of the values for this array when this window initially opens
+            exploredPixelArray = (int[,])OOTMain.Instance.ExploredPixelValues.Clone();
 
             // Load textures
             LoadTextures();
@@ -546,6 +540,9 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             isPlayerTraveling = false;
             mapTimeHasChanged = false;
 
+            // Make a "clone" of the values for this array when this window initially opens
+            exploredPixelArray = (int[,])OOTMain.Instance.ExploredPixelValues.Clone();
+
             worldTimer = GameObject.Find("DaggerfallUnity").GetComponent<WorldTime>();
             dateTime = worldTimer.DaggerfallDateTime.Clone();
             initialDateTimeInSeconds = dateTime.ToSeconds();
@@ -561,6 +558,9 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
 
             isPlayerTraveling = false;
             mapTimeHasChanged = false;
+
+            // When this window closes, make a "clone" of the exploredPixelArray values and set them to what is essentially the "save-data" version of this array for later use
+            OOTMain.Instance.ExploredPixelValues = (int[,])exploredPixelArray.Clone();
 
             performFastTravel();
         }

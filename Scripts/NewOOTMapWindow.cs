@@ -103,6 +103,7 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
         TextLabel firstDebugLabel;
         TextLabel secondDebugLabel;
         TextLabel thirdDebugLabel;
+        TextLabel fourthDebugLabel;
 
         #endregion
 
@@ -119,6 +120,8 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
         Dictionary<string, Vector2> offsetLookup = new Dictionary<string, Vector2>();
 
         int[,] exploredPixelArray = new int[1000, 500];
+
+        byte[,] usableHeightMapValues = new byte[1000, 500];
 
         bool regionSelectionMode = false;
         bool markSearchedLocation = false;
@@ -213,6 +216,8 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
 
             // Make a "clone" of the values for this array when this window initially opens
             exploredPixelArray = (int[,])OOTMain.Instance.ExploredPixelValues.Clone();
+
+            usableHeightMapValues = GetConvertedHeightMapValues();
 
             // Load textures
             LoadTextures();
@@ -372,15 +377,6 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             regionSelectInfoLabel.TextScale = 2.0f;
             regionSelectInfoLabel.Enabled = false;
 
-            // Tomorrow maybe I should consider working on the basic save-data aspect of this mod, thus far atleast, such as for saving and loading the fog of war discovered values and such, will see.
-            // I'll see about somehow getting the "explored/found" locations be a thing that only shows them when they are already known, rather than always like atm, will see.
-            // There really are a good few ways I can approach this. But I also have to keep in mind that keeping the "search" function is also going to be important, so yeah, going to take some thought overall.
-            // Should obviously check how the vanilla game/world map keeps track of "hidden" and non-hidden locations and in what data-type it does this.
-            // Keep in mind also that I may very likely rework the search function alot. So that the first thing you likely have to specify is the region you want to search in, not only the location name, etc.
-            // Might just make it easier on myself and just have the "undiscovered" layer determine what locations actually give the location name when moused over, that way I can just draw all the location
-            // dots one time, but still have the same effect in essense. The main issue with that case would be the searching thing, but I suppose I could just do similar and check if the locations with
-            // the searched name is in a DFPosition that is undiscovered on the unexploredAreas array, or something like that. Probably would be easier than actually flagging the locations as hidden and such.
-
             // Add region/location label
             regionLabel = DaggerfallUI.AddTextLabel(DaggerfallUI.LargeFont, new Vector2(0, 2), string.Empty, worldMapPanel);
             regionLabel.HorizontalAlignment = HorizontalAlignment.Center;
@@ -398,6 +394,10 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             thirdDebugLabel = DaggerfallUI.AddTextLabel(DaggerfallUI.LargeFont, new Vector2(0, 48), string.Empty, worldMapPanel);
             thirdDebugLabel.HorizontalAlignment = HorizontalAlignment.Left;
             thirdDebugLabel.TextScale = 2.0f;
+
+            fourthDebugLabel = DaggerfallUI.AddTextLabel(DaggerfallUI.LargeFont, new Vector2(0, 71), string.Empty, worldMapPanel);
+            fourthDebugLabel.HorizontalAlignment = HorizontalAlignment.Left;
+            fourthDebugLabel.TextScale = 2.0f;
 
             // Setup Color array for determining what region the mouse cursor is currently hovering over
             regionColorsBitmap = regionBitmapColorsTexture.GetPixels32();
@@ -418,6 +418,7 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             toggleUIText.VerticalAlignment = VerticalAlignment.Middle;
             toggleUIText.HorizontalAlignment = HorizontalAlignment.Center;
             toggleUIText.TextScale = 3.5f;
+            toggleUIButton.Enabled = false; // For Testing
 
             // Map Clock Display
             mapClockButton = DaggerfallUI.AddButton(new Rect(350, 10, 260, 35), worldMapPanel);
@@ -543,6 +544,8 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             // Make a "clone" of the values for this array when this window initially opens
             exploredPixelArray = (int[,])OOTMain.Instance.ExploredPixelValues.Clone();
 
+            usableHeightMapValues = GetConvertedHeightMapValues();
+
             worldTimer = GameObject.Find("DaggerfallUnity").GetComponent<WorldTime>();
             dateTime = worldTimer.DaggerfallDateTime.Clone();
             initialDateTimeInSeconds = dateTime.ToSeconds();
@@ -562,12 +565,17 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             // When this window closes, make a "clone" of the exploredPixelArray values and set them to what is essentially the "save-data" version of this array for later use
             OOTMain.Instance.ExploredPixelValues = (int[,])exploredPixelArray.Clone();
 
+            Array.Clear(usableHeightMapValues, 0, usableHeightMapValues.Length);
+
             performFastTravel();
         }
 
         public override void Update()
         {
             base.Update();
+
+            // Tomorrow, the next thing I will probably try to work on is getting more detailed into the "travel time" or how much time it takes to go from one pixel to another on the map sort of thing.
+            // Likely have a counter, once you are on a pixel then there is a counter that you need to "exhaust" until you can move to the next, maybe.
 
             if (mapTimeHasChanged)
             {
@@ -626,6 +634,11 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
                     UpdatePlayerTravelDotsTexture();
                 }
             }
+
+            firstDebugLabel.Text = string.Format("T L H: {0}", usableHeightMapValues[previousPlayerPosition.X, previousPlayerPosition.Y - 1]);
+            secondDebugLabel.Text = string.Format("T R H: {0}", usableHeightMapValues[previousPlayerPosition.X + 1, previousPlayerPosition.Y - 1]);
+            thirdDebugLabel.Text = string.Format("B L H: {0}", usableHeightMapValues[previousPlayerPosition.X, previousPlayerPosition.Y]);
+            fourthDebugLabel.Text = string.Format("B R H: {0}", usableHeightMapValues[previousPlayerPosition.X + 1, previousPlayerPosition.Y]);
 
             // Input handling
             HotkeySequence.KeyModifiers keyModifiers = HotkeySequence.GetKeyboardKeyModifiers();
@@ -826,8 +839,11 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
                         // Ensure the x and y coordinates are within the pixel buffer bounds
                         if (x >= 0 && x < width && y >= 0 && y < height)
                         {
-                            // Set the pixel color to the specified color
-                            exploredPixelArray[x, y] = 1;
+                            if (CheckMapLineOfSight(playX, playY, x, y))
+                            {
+                                // Set the pixel color to the specified color
+                                exploredPixelArray[x, y] = 1;
+                            }
                         }
                     }
                 }
@@ -944,6 +960,78 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             }
 
             return pixelsList;
+        }
+
+        bool CheckMapLineOfSight(int playX, int playY, int destX, int destY)
+        {
+            int playerXMapPixel = playX;
+            int playerYMapPixel = playY;
+            int endPosXMapPixel = destX;
+            int endPosYMapPixel = destY;
+
+            // Do rest of distance calculation and populating list with pixel values in-between playerPos and destinationPos
+            List<DFPosition> pixelsList = new List<DFPosition>();
+            int distanceXMapPixels = endPosXMapPixel - playerXMapPixel;
+            int distanceYMapPixels = endPosYMapPixel - playerYMapPixel;
+            int distanceXMapPixelsAbs = Mathf.Abs(distanceXMapPixels);
+            int distanceYMapPixelsAbs = Mathf.Abs(distanceYMapPixels);
+            int furthestOfXandYDistance = 0;
+
+            if (distanceXMapPixelsAbs <= distanceYMapPixelsAbs)
+                furthestOfXandYDistance = distanceYMapPixelsAbs;
+            else
+                furthestOfXandYDistance = distanceXMapPixelsAbs;
+
+            int xPixelMovementDirection = (distanceXMapPixels >= 0) ? 1 : -1;
+            int yPixelMovementDirection = (distanceYMapPixels >= 0) ? 1 : -1;
+
+            int numberOfMovements = 0;
+            int shorterOfXandYDistanceIncrementer = 0;
+
+            while (numberOfMovements < furthestOfXandYDistance)
+            {
+                DFPosition pixelPos = new DFPosition();
+
+                if (furthestOfXandYDistance == distanceXMapPixelsAbs)
+                {
+                    playerXMapPixel += xPixelMovementDirection;
+                    shorterOfXandYDistanceIncrementer += distanceYMapPixelsAbs;
+
+                    if (shorterOfXandYDistanceIncrementer > distanceXMapPixelsAbs)
+                    {
+                        shorterOfXandYDistanceIncrementer -= distanceXMapPixelsAbs;
+                        playerYMapPixel += yPixelMovementDirection;
+                    }
+                }
+                else
+                {
+                    playerYMapPixel += yPixelMovementDirection;
+                    shorterOfXandYDistanceIncrementer += distanceXMapPixelsAbs;
+
+                    if (shorterOfXandYDistanceIncrementer > distanceYMapPixelsAbs)
+                    {
+                        shorterOfXandYDistanceIncrementer -= distanceYMapPixelsAbs;
+                        playerXMapPixel += xPixelMovementDirection;
+                    }
+                }
+
+                pixelPos.Y = playerYMapPixel;
+                pixelPos.X = playerXMapPixel;
+
+                pixelsList.Add(pixelPos);
+
+                ++numberOfMovements;
+            }
+
+            foreach(DFPosition dfPixel in pixelsList)
+            {
+                int dfPixelHeight = usableHeightMapValues[dfPixel.X, dfPixel.Y];
+                int playerPixelHeight = usableHeightMapValues[playX, playY];
+                int destPixelHeight = usableHeightMapValues[destX, destY];
+
+                if (dfPixelHeight > playerPixelHeight && dfPixelHeight > destPixelHeight) { return false; }
+            }
+            return true;
         }
 
         // perform fast travel actions
@@ -2127,6 +2215,57 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             }
             else
                 regionSelectionMode = false;
+        }
+
+        byte[,] GetConvertedHeightMapValues()
+        {
+            WoodsFile woodsFile = new WoodsFile(Path.Combine(DaggerfallUnity.Instance.Arena2Path, "WOODS.WLD"), FileUsage.UseMemory, true);
+            byte[] heightData = woodsFile.Buffer;
+            byte[,] arrayData2D = new byte[1000, 500];
+            byte nH = 0;
+            for (int y = 0; y < 500; y++) // Process raw height data into something more visible to humans
+            {
+                for (int x = 0; x < 1000; x++)
+                {
+                    byte h = heightData[y * 1000 + x];
+                    if (h <= 2)
+                        nH = 0;
+                    else if (h >= 4 && h <= 11)
+                        nH = 0;
+                    else if (h >= 12 && h <= 16)
+                        nH = 0;
+                    else if (h >= 17 && h <= 22)
+                        nH = 1;
+                    else if (h >= 24 && h <= 27)
+                        nH = 2;
+                    else if (h >= 29 && h <= 34)
+                        nH = 3;
+                    else if (h >= 35 && h <= 40)
+                        nH = 4;
+                    else if (h >= 42 && h <= 49)
+                        nH = 5;
+                    else if (h >= 50 && h <= 57)
+                        nH = 6;
+                    else if (h >= 59 && h <= 65)
+                        nH = 7;
+                    else if (h >= 67 && h <= 72)
+                        nH = 8;
+                    else if (h >= 74 && h <= 80)
+                        nH = 9;
+                    else if (h >= 82 && h <= 92)
+                        nH = 10;
+                    else if (h >= 94 && h <= 100)
+                        nH = 11;
+                    else if (h >= 102 && h <= 109)
+                        nH = 12;
+                    else if (h >= 255)
+                        nH = 13;
+                    else
+                        nH = 0;
+                    arrayData2D[x, y] = nH;
+                }
+            }
+            return arrayData2D;
         }
 
         void VariousUsefulNotesAndMethods()

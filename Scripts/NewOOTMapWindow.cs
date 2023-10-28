@@ -1023,13 +1023,14 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
                 ++numberOfMovements;
             }
 
-            foreach(DFPosition dfPixel in pixelsList)
+            int playerPixelHeight = usableHeightMapValues[playX, playY];
+            int destPixelHeight = usableHeightMapValues[destX, destY];
+
+            foreach (DFPosition dfPixel in pixelsList)
             {
                 int dfPixelHeight = usableHeightMapValues[dfPixel.X, dfPixel.Y];
-                int playerPixelHeight = usableHeightMapValues[playX, playY];
-                int destPixelHeight = usableHeightMapValues[destX, destY];
 
-                if (dfPixelHeight > playerPixelHeight && dfPixelHeight > destPixelHeight) { return false; }
+                if (dfPixelHeight > playerPixelHeight && dfPixelHeight >= destPixelHeight) { return false; }
             }
             return true;
         }

@@ -20,12 +20,10 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
     /// </summary>
     public class NewOOTMapWindow : DaggerfallPopupWindow
     {
-        PlayerEntity player;
-
-        PlayerEntity Player
-        {
-            get { return (player != null) ? player : player = GameManager.Instance.PlayerEntity; }
-        }
+        public int Speed { get { return GameManager.Instance.PlayerEntity.Stats.LiveSpeed - 50; } } // This stuff will eventually be moved to another "FormulaHelper" type script.
+        public int RunSkill { get { return GameManager.Instance.PlayerEntity.Skills.GetLiveSkillValue(DFCareer.Skills.Running); } }
+        public int SwimSkill { get { return GameManager.Instance.PlayerEntity.Skills.GetLiveSkillValue(DFCareer.Skills.Swimming); } }
+        public int ClimbSkill { get { return GameManager.Instance.PlayerEntity.Skills.GetLiveSkillValue(DFCareer.Skills.Climbing); } }
 
         #region Testing Properties
 
@@ -99,11 +97,16 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
 
         TextLabel regionSelectInfoLabel;
 
+        TextLabel travelModeLabel;
+        TextLabel travelTypeLabel;
+
         TextLabel regionLabel;
         TextLabel firstDebugLabel;
         TextLabel secondDebugLabel;
         TextLabel thirdDebugLabel;
         TextLabel fourthDebugLabel;
+        TextLabel fifthDebugLabel;
+        TextLabel sixthDebugLabel;
 
         #endregion
 
@@ -122,6 +125,7 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
         int[,] exploredPixelArray = new int[1000, 500];
 
         byte[,] usableHeightMapValues = new byte[1000, 500];
+        byte[,] usableClimateMapValues = new byte[1001, 500];
 
         bool regionSelectionMode = false;
         bool markSearchedLocation = false;
@@ -131,6 +135,7 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
         string clockDisplayString = "";
         ulong initialDateTimeInSeconds = 0;
         ulong dateTimeInSeconds = 0;
+        ulong timeSinceLastModeChange = 0;
         public static bool mapTimeHasChanged = false;
         protected Button mapClockButton;
         protected Rect mapClockRect = new Rect(0, 0, 90, 11);
@@ -159,7 +164,16 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
 
         public static bool isPlayerTraveling = false;
 
-        int travelDelayTimer = 0;
+        TravelType travelType = TravelType.FootWalking;
+        TravelMode travelMode = TravelMode.Cautious;
+
+        ClimateTypes currentPixelClimate = ClimateTypes.Ocean_Water;
+        ClimateTypes nextPixelClimate = ClimateTypes.Ocean_Water;
+
+        int currentPixelTravelTime = 0;
+        int nextPixelTravelTime = 0;
+        byte currentPixelHeight = 0;
+        byte nextPixelHeight = 0;
 
         DFPosition endPos = new DFPosition(109, 158);
         public DFPosition EndPos { get { return endPos; } protected internal set { endPos = value; } }
@@ -218,6 +232,9 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             exploredPixelArray = (int[,])OOTMain.Instance.ExploredPixelValues.Clone();
 
             usableHeightMapValues = GetConvertedHeightMapValues();
+            usableClimateMapValues = GetClimateMapValues();
+
+            currentPixelClimate = (ClimateTypes)usableClimateMapValues[previousPlayerPosition.X, previousPlayerPosition.Y];
 
             // Load textures
             LoadTextures();
@@ -322,7 +339,7 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             searchHighlightTexture.filterMode = FilterMode.Point;
 
             // Panel housing the button bar on the left of the screen
-            leftButtonsPanel = DaggerfallUI.AddPanel(new Rect(0, 125, 105, 265), worldMapPanel);
+            leftButtonsPanel = DaggerfallUI.AddPanel(new Rect(0, 150, 105, 265), worldMapPanel);
             leftButtonsPanel.BackgroundColor = new Color(0.9f, 0.1f, 0.5f, 0.75f); // For testing purposes
 
             // Testing First UI Button in left panel
@@ -346,7 +363,7 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             testingUIButton5.OnMouseClick += ExitMapWindow_OnMouseClick;
 
             // Panel housing the button bar on the right of the screen
-            rightButtonsPanel = DaggerfallUI.AddPanel(new Rect(895, 125, 105, 317), worldMapPanel);
+            rightButtonsPanel = DaggerfallUI.AddPanel(new Rect(895, 15, 105, 421), worldMapPanel);
             rightButtonsPanel.BackgroundColor = new Color(0.9f, 0.1f, 0.5f, 0.75f); // For testing purposes
 
             // Testing First UI Button in right panel
@@ -377,6 +394,20 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             regionSelectInfoLabel.TextScale = 2.0f;
             regionSelectInfoLabel.Enabled = false;
 
+            // Testing Seventh UI Button in right panel
+            Button testingUIButton12 = CreateGenericTextButton(new Rect(2, 315, 100, 50), rightButtonsPanel, (int)SoundClips.EnemyCentaurBark, "Travel Mode: Cycle", 2.7f);
+            testingUIButton12.OnMouseClick += SwitchTravelMode_OnMouseClick;
+            travelModeLabel = DaggerfallUI.AddTextLabel(DaggerfallUI.LargeFont, new Vector2(0, 65), GetTravelModeLabelString(), worldMapPanel);
+            travelModeLabel.HorizontalAlignment = HorizontalAlignment.Center;
+            travelModeLabel.TextScale = 2.0f;
+
+            // Testing Eighth UI Button in right panel
+            Button testingUIButton13 = CreateGenericTextButton(new Rect(2, 367, 100, 50), rightButtonsPanel, (int)SoundClips.ActivateRatchet, "Travel Type: Cycle", 2.7f);
+            testingUIButton13.OnMouseClick += CycleTravelType_OnMouseClick;
+            travelTypeLabel = DaggerfallUI.AddTextLabel(DaggerfallUI.LargeFont, new Vector2(0, 85), GetTravelTypeLabelString(), worldMapPanel);
+            travelTypeLabel.HorizontalAlignment = HorizontalAlignment.Center;
+            travelTypeLabel.TextScale = 2.0f;
+
             // Add region/location label
             regionLabel = DaggerfallUI.AddTextLabel(DaggerfallUI.LargeFont, new Vector2(0, 2), string.Empty, worldMapPanel);
             regionLabel.HorizontalAlignment = HorizontalAlignment.Center;
@@ -398,6 +429,14 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             fourthDebugLabel = DaggerfallUI.AddTextLabel(DaggerfallUI.LargeFont, new Vector2(0, 71), string.Empty, worldMapPanel);
             fourthDebugLabel.HorizontalAlignment = HorizontalAlignment.Left;
             fourthDebugLabel.TextScale = 2.0f;
+
+            fifthDebugLabel = DaggerfallUI.AddTextLabel(DaggerfallUI.LargeFont, new Vector2(0, 94), string.Empty, worldMapPanel);
+            fifthDebugLabel.HorizontalAlignment = HorizontalAlignment.Left;
+            fifthDebugLabel.TextScale = 2.0f;
+
+            sixthDebugLabel = DaggerfallUI.AddTextLabel(DaggerfallUI.LargeFont, new Vector2(0, 117), string.Empty, worldMapPanel);
+            sixthDebugLabel.HorizontalAlignment = HorizontalAlignment.Left;
+            sixthDebugLabel.TextScale = 2.0f;
 
             // Setup Color array for determining what region the mouse cursor is currently hovering over
             regionColorsBitmap = regionBitmapColorsTexture.GetPixels32();
@@ -432,7 +471,7 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             mapClockText.TextScale = 3.00f;
             mapClockText.Text = clockDisplayString;
             mapClockText.TextColor = new Color(0f, 0f, 0f, 1f);
-            mapClockButton.Enabled = false; // For testing so I can see stuff better.
+            //mapClockButton.Enabled = false; // For testing so I can see stuff better.
 
             // Stop Travel button
             stopTravelButton = DaggerfallUI.AddButton(new Rect(920, 440, 80, 30), worldMapPanel);
@@ -491,7 +530,8 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
         {
             // Stops travel on the map-screen and sets the destination as the last pixel the player was at on the map when it was clicked.
             isPlayerTraveling = false;
-            travelDelayTimer = 0;
+            //currentPixelTravelTime = 0; // This does not change to 0, but keeps whatever value it had before stopping, since you are presumably on the same pixel still.
+            nextPixelTravelTime = 0;
 
             currentTravelLinePositionsList = new List<DFPosition>();
             followingTravelLinePositionsList = new List<DFPosition>();
@@ -545,11 +585,19 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             exploredPixelArray = (int[,])OOTMain.Instance.ExploredPixelValues.Clone();
 
             usableHeightMapValues = GetConvertedHeightMapValues();
+            usableClimateMapValues = GetClimateMapValues();
+
+            currentPixelClimate = (ClimateTypes)usableClimateMapValues[previousPlayerPosition.X, previousPlayerPosition.Y];
+
+            travelMode = TravelMode.Cautious;
+            if (currentPixelClimate != ClimateTypes.Ocean_Water) { travelType = TravelType.FootWalking; }
+            else { travelType = TravelType.Swimming; }
 
             worldTimer = GameObject.Find("DaggerfallUnity").GetComponent<WorldTime>();
             dateTime = worldTimer.DaggerfallDateTime.Clone();
             initialDateTimeInSeconds = dateTime.ToSeconds();
             dateTimeInSeconds = dateTime.ToSeconds();
+            timeSinceLastModeChange = 0;
             clockDisplayString = GetTimeMode(dateTime.Hour, dateTime.Minute) + " , " + dateTime.DayName + " the " + (dateTime.Day + 1) + GetSuffix(dateTime.Day + 1);
         }
 
@@ -562,10 +610,13 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             isPlayerTraveling = false;
             mapTimeHasChanged = false;
 
+            timeSinceLastModeChange = 0;
+
             // When this window closes, make a "clone" of the exploredPixelArray values and set them to what is essentially the "save-data" version of this array for later use
             OOTMain.Instance.ExploredPixelValues = (int[,])exploredPixelArray.Clone();
 
             Array.Clear(usableHeightMapValues, 0, usableHeightMapValues.Length);
+            Array.Clear(usableClimateMapValues, 0, usableClimateMapValues.Length);
 
             performFastTravel();
         }
@@ -573,9 +624,6 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
         public override void Update()
         {
             base.Update();
-
-            // Tomorrow, the next thing I will probably try to work on is getting more detailed into the "travel time" or how much time it takes to go from one pixel to another on the map sort of thing.
-            // Likely have a counter, once you are on a pixel then there is a counter that you need to "exhaust" until you can move to the next, maybe.
 
             if (mapTimeHasChanged)
             {
@@ -597,13 +645,27 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
 
             if (isPlayerTraveling)
             {
-                ++travelDelayTimer;
-                dateTimeInSeconds += 50;
+                currentPixelHeight = usableHeightMapValues[previousPlayerPosition.X, previousPlayerPosition.Y];
+                nextPixelHeight = usableHeightMapValues[nextPlayerPosition.X, nextPlayerPosition.Y];
+                currentPixelClimate = (ClimateTypes)usableClimateMapValues[previousPlayerPosition.X, previousPlayerPosition.Y];
+                nextPixelClimate = (ClimateTypes)usableClimateMapValues[nextPlayerPosition.X, nextPlayerPosition.Y];
+
+                if (currentPixelTravelTime == 0) { currentPixelTravelTime = CalculatePixelTravelTime(true); }
+
+                if (nextPixelTravelTime == 0) { nextPixelTravelTime = CalculatePixelTravelTime(false); }
+
+                --currentPixelTravelTime;
+                dateTimeInSeconds += 120;
                 mapTimeHasChanged = true;
 
-                if (travelDelayTimer >= 2)
+                if (currentPixelTravelTime <= 0)
                 {
-                    travelDelayTimer = 0;
+                    currentPixelTravelTime = nextPixelTravelTime;
+                    nextPixelTravelTime = 0;
+
+                    // Automatically change travelType when changing from either land to water or water to land.
+                    if (currentPixelClimate != ClimateTypes.Ocean_Water && nextPixelClimate == ClimateTypes.Ocean_Water) { travelType = TravelType.Swimming; travelTypeLabel.Text = GetTravelTypeLabelString(); }
+                    if (currentPixelClimate == ClimateTypes.Ocean_Water && nextPixelClimate != ClimateTypes.Ocean_Water) { travelType = TravelType.FootWalking; travelTypeLabel.Text = GetTravelTypeLabelString(); }
 
                     /*DFPosition worldPos = MapsFile.MapPixelToWorldCoord(nextPlayerPosition.X, nextPlayerPosition.Y);
                     playerGPS.WorldX = worldPos.X;
@@ -635,10 +697,16 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
                 }
             }
 
-            firstDebugLabel.Text = string.Format("T L H: {0}", usableHeightMapValues[previousPlayerPosition.X, previousPlayerPosition.Y - 1]);
-            secondDebugLabel.Text = string.Format("T R H: {0}", usableHeightMapValues[previousPlayerPosition.X + 1, previousPlayerPosition.Y - 1]);
-            thirdDebugLabel.Text = string.Format("B L H: {0}", usableHeightMapValues[previousPlayerPosition.X, previousPlayerPosition.Y]);
-            fourthDebugLabel.Text = string.Format("B R H: {0}", usableHeightMapValues[previousPlayerPosition.X + 1, previousPlayerPosition.Y]);
+            firstDebugLabel.Text = string.Format("Current Pixel Time Remaining: {0}", currentPixelTravelTime);
+            secondDebugLabel.Text = string.Format("Next Pixel Travel Time: {0}", nextPixelTravelTime);
+            thirdDebugLabel.Text = string.Format("Curr Pixel Height: {0}", currentPixelHeight);
+            fourthDebugLabel.Text = string.Format("Next Pixel Height: {0}", nextPixelHeight);
+            fifthDebugLabel.Text = string.Format("Curr Climate: {0}", currentPixelClimate.ToString());
+            sixthDebugLabel.Text = string.Format("Next Climate: {0}", nextPixelClimate.ToString());
+            //thirdDebugLabel.Text = string.Format("T L H: {0}", usableHeightMapValues[previousPlayerPosition.X, previousPlayerPosition.Y - 1]);
+            //fourthDebugLabel.Text = string.Format("T R H: {0}", usableHeightMapValues[previousPlayerPosition.X + 1, previousPlayerPosition.Y - 1]);
+            //fifthDebugLabel.Text = string.Format("B L H: {0}", usableHeightMapValues[previousPlayerPosition.X, previousPlayerPosition.Y]);
+            //sixthDebugLabel.Text = string.Format("B R H: {0}", usableHeightMapValues[previousPlayerPosition.X + 1, previousPlayerPosition.Y]);
 
             // Input handling
             HotkeySequence.KeyModifiers keyModifiers = HotkeySequence.GetKeyboardKeyModifiers();
@@ -712,6 +780,94 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             }
         }
 
+        // Tomorrow, work on trying to get the time "cost" accounted for pixel climate, season, and weather, also get weather working and considered on map, etc.
+        // When that is done, do testing and make github commits and such. Then if that is mostly good, start maybe doing similar for line of sight value refinement and such, will see.
+        public int CalculatePixelTravelTime(bool onCurrentPixel)
+        {
+            // Eventually include climate and current weather condition as factors to increase/decrease travel time.
+            int travMod = 0;
+            switch (travelType)
+            {
+                case TravelType.FootWalking:
+                default:
+                    travMod += 23;
+                    travMod -= Mathf.RoundToInt(Mathf.Clamp(Speed, 0, 150) * 0.06f);
+                    travMod += Mathf.CeilToInt(usableHeightMapValues[previousPlayerPosition.X, previousPlayerPosition.Y] * 0.7f); break;
+                case TravelType.FootRunning:
+                    travMod += 16;
+                    travMod -= Mathf.RoundToInt(Mathf.Clamp(Speed, 0, 150) * 0.06f);
+                    travMod -= Mathf.RoundToInt(Mathf.Clamp(RunSkill, 0, 300) * 0.05f);
+                    travMod += Mathf.CeilToInt(usableHeightMapValues[previousPlayerPosition.X, previousPlayerPosition.Y] * 0.7f); break;
+                case TravelType.Wagon:
+                    travMod += 30;
+                    travMod += Mathf.CeilToInt(usableHeightMapValues[previousPlayerPosition.X, previousPlayerPosition.Y] * 1.4f); break;
+                case TravelType.Horse:
+                    travMod += 10;
+                    travMod += Mathf.CeilToInt(usableHeightMapValues[previousPlayerPosition.X, previousPlayerPosition.Y] * 1.0f); break;
+                case TravelType.Swimming:
+                    travMod += 30;
+                    travMod -= Mathf.RoundToInt(Mathf.Clamp(Speed, 0, 150) * 0.04f);
+                    travMod -= Mathf.RoundToInt(Mathf.Clamp(SwimSkill, 0, 300) * 0.12f); break;
+                case TravelType.Raft:
+                    travMod += 20; break;
+                case TravelType.Boat:
+                    travMod += 15; break;
+            }
+
+            int delta = 0;
+            if (onCurrentPixel == false)
+            {
+                if (currentPixelHeight < nextPixelHeight) { delta = Mathf.RoundToInt((9 - (ClimbSkill * 0.06f)) * Mathf.Abs(currentPixelHeight - nextPixelHeight)); }
+                else if (currentPixelHeight > nextPixelHeight) { delta = Mathf.RoundToInt((6 - (ClimbSkill * 0.06f)) * Mathf.Abs(currentPixelHeight - nextPixelHeight)); }
+            }
+            if (delta < 0) { delta = 0; } // Don't allow delta to be negative
+            travMod += delta;
+
+            int travTime = travelMode == TravelMode.Reckless ? Mathf.RoundToInt(travMod * 0.65f) : travMod;
+            if (travTime < 2) { travTime = 2; } // Don't allow travTime from going below 2
+            return travTime;
+        }
+
+        /// <summary>
+        /// All the vanilla Daggerfall climate types, assigned their associated byte data value.
+        /// </summary>
+        public enum ClimateTypes
+        {
+            Ocean_Water = 223,
+            Desert_South = 224,
+            Hot_Desert_South_East = 225,
+            Mountains = 226,
+            Rainforest = 227,
+            Swamp = 228,
+            SubTropical = 229,
+            Woodland_Hills = 230,
+            Temperate_Woodland = 231,
+            Haunted_Woodland = 232,
+        }
+
+        /// <summary>
+        /// Types and combinations of travel modes, to make these easier to use in case-switches rather than large confusing if-statement chains.
+        /// </summary>
+        public enum TravelType
+        {
+            FootWalking,
+            FootRunning,
+            Wagon,
+            Horse,
+            Swimming,
+            Raft,
+            Boat,
+        }
+
+        /// <summary>
+        /// Types and combinations of travel modes, to make these easier to use in case-switches rather than large confusing if-statement chains.
+        /// </summary>
+        public enum TravelMode
+        {
+            Cautious,
+            Reckless,
+        }
+
         // Handle clicks on the world map panel
         void ClickHandler(BaseScreenComponent sender, Vector2 position)
         {
@@ -751,7 +907,7 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
                 {
                     nextPlayerPosition.Y = currentTravelLinePositionsList[0].Y;
                     nextPlayerPosition.X = currentTravelLinePositionsList[0].X;
-                    dateTimeInSeconds += 25;
+                    dateTimeInSeconds += 15;
                     mapTimeHasChanged = true;
                 }
 
@@ -1039,7 +1195,8 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
         private void performFastTravel() // Maybe work on getting this to function again tomorrow or next time, with the more exact screen pixel positions, will see.
         {
             isPlayerTraveling = false;
-            travelDelayTimer = 0;
+            currentPixelTravelTime = 0;
+            nextPixelTravelTime = 0;
 
             currentTravelLinePositionsList = new List<DFPosition>();
             followingTravelLinePositionsList = new List<DFPosition>();
@@ -2218,13 +2375,82 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
                 regionSelectionMode = false;
         }
 
+        private void SwitchTravelMode_OnMouseClick(BaseScreenComponent sender, Vector2 position)
+        {
+            if (travelMode == TravelMode.Cautious) { travelMode = TravelMode.Reckless; }
+            else { travelMode = TravelMode.Cautious; }
+
+            travelModeLabel.Text = GetTravelModeLabelString();
+
+            if (timeSinceLastModeChange != dateTimeInSeconds)
+            {
+                timeSinceLastModeChange = dateTimeInSeconds;
+                currentPixelTravelTime += 5;
+            }
+        }
+
+        private void CycleTravelType_OnMouseClick(BaseScreenComponent sender, Vector2 position)
+        {
+            if (currentPixelClimate == ClimateTypes.Ocean_Water)
+            {
+                if (travelType == TravelType.Swimming) { travelType = TravelType.Raft; }
+                else if (travelType == TravelType.Raft) { travelType = TravelType.Boat; }
+                else if (travelType == TravelType.Boat) { travelType = TravelType.Swimming; }
+                else { travelType = TravelType.Swimming; }
+            }
+            else
+            {
+                if (travelType == TravelType.FootWalking) { travelType = TravelType.FootRunning; }
+                else if (travelType == TravelType.FootRunning) { travelType = TravelType.Wagon; }
+                else if (travelType == TravelType.Wagon) { travelType = TravelType.Horse; }
+                else if (travelType == TravelType.Horse) { travelType = TravelType.FootWalking; }
+                else { travelType = TravelType.FootWalking; }
+            }
+
+            travelTypeLabel.Text = GetTravelTypeLabelString();
+
+            if (timeSinceLastModeChange != dateTimeInSeconds)
+            {
+                timeSinceLastModeChange = dateTimeInSeconds;
+                currentPixelTravelTime += 2;
+            }
+        }
+
+        string GetTravelModeLabelString()
+        {
+            if (travelMode == TravelMode.Reckless) { return "Traveling: Recklessly"; }
+            else { return "Traveling: Cautiously"; }
+        }
+
+        string GetTravelTypeLabelString()
+        {
+            switch (travelType)
+            {
+                case TravelType.FootWalking:
+                default:
+                    return "By: Walking";
+                case TravelType.FootRunning:
+                    return "By: Running";
+                case TravelType.Wagon:
+                    return "By: Wagon";
+                case TravelType.Horse:
+                    return "By: Horse";
+                case TravelType.Swimming:
+                    return "By: Swimming";
+                case TravelType.Raft:
+                    return "By: Raft";
+                case TravelType.Boat:
+                    return "By: Boat";
+            }
+        }
+
         byte[,] GetConvertedHeightMapValues()
         {
             WoodsFile woodsFile = new WoodsFile(Path.Combine(DaggerfallUnity.Instance.Arena2Path, "WOODS.WLD"), FileUsage.UseMemory, true);
             byte[] heightData = woodsFile.Buffer;
             byte[,] arrayData2D = new byte[1000, 500];
             byte nH = 0;
-            for (int y = 0; y < 500; y++) // Process raw height data into something more visible to humans
+            for (int y = 0; y < 500; y++)
             {
                 for (int x = 0; x < 1000; x++)
                 {
@@ -2264,6 +2490,22 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
                     else
                         nH = 0;
                     arrayData2D[x, y] = nH;
+                }
+            }
+            return arrayData2D;
+        }
+
+        byte[,] GetClimateMapValues()
+        {
+            PakFile climateFile = new PakFile(Path.Combine(DaggerfallUnity.Instance.Arena2Path, "CLIMATE.PAK"));
+            byte[] climateData = climateFile.Buffer;
+            byte[,] arrayData2D = new byte[1001, 500];
+            for (int y = 0; y < 500; y++)
+            {
+                for (int x = 0; x < 1001; x++)
+                {
+                    byte c = climateData[y * 1001 + x];
+                    arrayData2D[x, y] = c;
                 }
             }
             return arrayData2D;

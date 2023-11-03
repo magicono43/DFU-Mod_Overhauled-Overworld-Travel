@@ -3,7 +3,7 @@
 // License:         MIT License (http://www.opensource.org/licenses/mit-license.php)
 // Author:          Kirk.O
 // Created On: 	    8/3/2023, 8:40 PM
-// Last Edit:		10/28/2023, 10:30 AM
+// Last Edit:		11/2/2023, 9:50 PM
 // Version:			1.00
 // Special Thanks:  
 // Modifier:
@@ -59,11 +59,58 @@ namespace OverhauledOverworldTravel
             mod.IsReady = true;
         }
 
+        public string timerText = "00:00.00";
+        public string storedTime = "00:00.00";
+        public string facingAngle = "0\u00B0";
+        private float elapsedTime = 0;
+
+        void Update()
+        {
+            elapsedTime += Time.deltaTime;
+            UpdatePlayerFacingAngle();
+        }
+
+        string UpdateTimerText()
+        {
+            int minutes = Mathf.FloorToInt(elapsedTime / 60);
+            int seconds = Mathf.FloorToInt(elapsedTime % 60);
+            float milliseconds = (elapsedTime % 1) * 100;
+            return string.Format("{0:00}:{1:00}.{2:00}", minutes, seconds, milliseconds);
+        }
+
+        public void ResetTimer()
+        {
+            elapsedTime = 0;
+            UpdateTimerText();
+        }
+
+        public void UpdatePlayerFacingAngle()
+        {
+            float rotation = GameManager.Instance.MainCamera.transform.eulerAngles.y;
+            facingAngle = rotation + "\u00B0";
+        }
+
+        void OnGUI()
+        {
+            if (Event.current.type.Equals(EventType.Repaint))
+            {
+                GUIStyle style = new GUIStyle();
+                style.normal.textColor = Color.red;
+                style.fontSize = 40;
+                string text = UpdateTimerText();
+                GUI.Label(new Rect(735, 80, 500, 24), text, style);
+                GUI.Label(new Rect(735, 122, 500, 24), storedTime, style);
+                GUI.Label(new Rect(735, 164, 500, 24), facingAngle, style);
+            }
+        }
+
         private void Start()
         {
             Debug.Log("Begin mod init: Overhauled Overworld Travel");
 
             Instance = this;
+
+            DaggerfallWorkshop.PlayerGPS.OnMapPixelChanged += WhenMapPixelChanges; // This is just for testing.
 
             mod.SaveDataInterface = ModSaveData;
 
@@ -89,6 +136,13 @@ namespace OverhauledOverworldTravel
             }
 
             Debug.Log("Finished mod init: Overhauled Overworld Travel");
+        }
+
+        // This is just for testing.
+        public void WhenMapPixelChanges(DaggerfallConnect.Utility.DFPosition mapPixel)
+        {
+            storedTime = UpdateTimerText();
+            ResetTimer();
         }
 
         static void LoadSettings(ModSettings modSettings, ModSettingsChange change)

@@ -107,6 +107,7 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
         TextLabel fourthDebugLabel;
         TextLabel fifthDebugLabel;
         TextLabel sixthDebugLabel;
+        TextLabel seventhDebugLabel;
 
         #endregion
 
@@ -167,8 +168,12 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
         TravelType travelType = TravelType.FootWalking;
         TravelMode travelMode = TravelMode.Cautious;
 
-        ClimateTypes currentPixelClimate = ClimateTypes.Ocean_Water;
-        ClimateTypes nextPixelClimate = ClimateTypes.Ocean_Water;
+        OOTMain.ClimateType currentPixelClimate = OOTMain.ClimateType.Ocean_Water;
+        OOTMain.ClimateType nextPixelClimate = OOTMain.ClimateType.Ocean_Water;
+
+        OOTMain.OOTWeatherType currentWeather = OOTMain.OOTWeatherType.Sunny;
+        int weatherChangeTimer = 0;
+        int weatherUnchangedCounter = 0;
 
         int currentPixelTravelTime = 0;
         int nextPixelTravelTime = 0;
@@ -234,7 +239,9 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             usableHeightMapValues = GetConvertedHeightMapValues();
             usableClimateMapValues = GetClimateMapValues();
 
-            currentPixelClimate = (ClimateTypes)usableClimateMapValues[previousPlayerPosition.X, previousPlayerPosition.Y];
+            currentPixelClimate = (OOTMain.ClimateType)usableClimateMapValues[previousPlayerPosition.X, previousPlayerPosition.Y];
+
+            currentWeather = OOTMain.DetermineCurrentVanillaWeather(); // This meant to be when opening the map interface from "in-game" to reflect what you were just seeing in the world.
 
             // Load textures
             LoadTextures();
@@ -339,7 +346,7 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             searchHighlightTexture.filterMode = FilterMode.Point;
 
             // Panel housing the button bar on the left of the screen
-            leftButtonsPanel = DaggerfallUI.AddPanel(new Rect(0, 150, 105, 265), worldMapPanel);
+            leftButtonsPanel = DaggerfallUI.AddPanel(new Rect(0, 225, 105, 265), worldMapPanel);
             leftButtonsPanel.BackgroundColor = new Color(0.9f, 0.1f, 0.5f, 0.75f); // For testing purposes
 
             // Testing First UI Button in left panel
@@ -437,6 +444,10 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             sixthDebugLabel = DaggerfallUI.AddTextLabel(DaggerfallUI.LargeFont, new Vector2(0, 117), string.Empty, worldMapPanel);
             sixthDebugLabel.HorizontalAlignment = HorizontalAlignment.Left;
             sixthDebugLabel.TextScale = 2.0f;
+
+            seventhDebugLabel = DaggerfallUI.AddTextLabel(DaggerfallUI.LargeFont, new Vector2(0, 140), string.Empty, worldMapPanel);
+            seventhDebugLabel.HorizontalAlignment = HorizontalAlignment.Left;
+            seventhDebugLabel.TextScale = 2.0f;
 
             // Setup Color array for determining what region the mouse cursor is currently hovering over
             regionColorsBitmap = regionBitmapColorsTexture.GetPixels32();
@@ -587,10 +598,12 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             usableHeightMapValues = GetConvertedHeightMapValues();
             usableClimateMapValues = GetClimateMapValues();
 
-            currentPixelClimate = (ClimateTypes)usableClimateMapValues[previousPlayerPosition.X, previousPlayerPosition.Y];
+            currentPixelClimate = (OOTMain.ClimateType)usableClimateMapValues[previousPlayerPosition.X, previousPlayerPosition.Y];
+
+            currentWeather = OOTMain.DetermineCurrentVanillaWeather(); // This meant to be when opening the map interface from "in-game" to reflect what you were just seeing in the world.
 
             travelMode = TravelMode.Cautious;
-            if (currentPixelClimate != ClimateTypes.Ocean_Water) { travelType = TravelType.FootWalking; }
+            if (currentPixelClimate != OOTMain.ClimateType.Ocean_Water) { travelType = TravelType.FootWalking; }
             else { travelType = TravelType.Swimming; }
 
             worldTimer = GameObject.Find("DaggerfallUnity").GetComponent<WorldTime>();
@@ -647,8 +660,10 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             {
                 currentPixelHeight = usableHeightMapValues[previousPlayerPosition.X, previousPlayerPosition.Y];
                 nextPixelHeight = usableHeightMapValues[nextPlayerPosition.X, nextPlayerPosition.Y];
-                currentPixelClimate = (ClimateTypes)usableClimateMapValues[previousPlayerPosition.X, previousPlayerPosition.Y];
-                nextPixelClimate = (ClimateTypes)usableClimateMapValues[nextPlayerPosition.X, nextPlayerPosition.Y];
+                currentPixelClimate = (OOTMain.ClimateType)usableClimateMapValues[previousPlayerPosition.X, previousPlayerPosition.Y];
+                nextPixelClimate = (OOTMain.ClimateType)usableClimateMapValues[nextPlayerPosition.X, nextPlayerPosition.Y];
+
+                if (weatherChangeTimer == 0) { weatherChangeTimer = UnityEngine.Random.Range(150, 301); } // 5-10 hours between possible weather change checks.
 
                 if (currentPixelTravelTime == 0) { currentPixelTravelTime = CalculatePixelTravelTime(true); }
 
@@ -658,14 +673,20 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
                 dateTimeInSeconds += 120;
                 mapTimeHasChanged = true;
 
+                --weatherChangeTimer;
+                if (weatherChangeTimer <= 0) { currentWeather = OOTMain.RollForWeatherChange(currentWeather, currentPixelClimate, OOTMain.GetSeasonFromDFSeconds(dateTimeInSeconds), ref weatherUnchangedCounter); }
+
                 if (currentPixelTravelTime <= 0)
                 {
                     currentPixelTravelTime = nextPixelTravelTime;
                     nextPixelTravelTime = 0;
 
+                    // Automatically change currentWeather to conform to the weather restrictions of the new climate just moved into.
+                    if (currentPixelClimate != nextPixelClimate) { currentWeather = OOTMain.ConformWeatherToClimate(currentWeather, nextPixelClimate); }
+
                     // Automatically change travelType when changing from either land to water or water to land.
-                    if (currentPixelClimate != ClimateTypes.Ocean_Water && nextPixelClimate == ClimateTypes.Ocean_Water) { travelType = TravelType.Swimming; travelTypeLabel.Text = GetTravelTypeLabelString(); }
-                    if (currentPixelClimate == ClimateTypes.Ocean_Water && nextPixelClimate != ClimateTypes.Ocean_Water) { travelType = TravelType.FootWalking; travelTypeLabel.Text = GetTravelTypeLabelString(); }
+                    if (currentPixelClimate != OOTMain.ClimateType.Ocean_Water && nextPixelClimate == OOTMain.ClimateType.Ocean_Water) { travelType = TravelType.Swimming; travelTypeLabel.Text = GetTravelTypeLabelString(); }
+                    if (currentPixelClimate == OOTMain.ClimateType.Ocean_Water && nextPixelClimate != OOTMain.ClimateType.Ocean_Water) { travelType = TravelType.FootWalking; travelTypeLabel.Text = GetTravelTypeLabelString(); }
 
                     /*DFPosition worldPos = MapsFile.MapPixelToWorldCoord(nextPlayerPosition.X, nextPlayerPosition.Y);
                     playerGPS.WorldX = worldPos.X;
@@ -703,6 +724,7 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             fourthDebugLabel.Text = string.Format("Next Pixel Height: {0}", nextPixelHeight);
             fifthDebugLabel.Text = string.Format("Curr Climate: {0}", currentPixelClimate.ToString());
             sixthDebugLabel.Text = string.Format("Next Climate: {0}", nextPixelClimate.ToString());
+            seventhDebugLabel.Text = string.Format("Current Weather: {0}", currentWeather.ToString());
             //thirdDebugLabel.Text = string.Format("T L H: {0}", usableHeightMapValues[previousPlayerPosition.X, previousPlayerPosition.Y - 1]);
             //fourthDebugLabel.Text = string.Format("T R H: {0}", usableHeightMapValues[previousPlayerPosition.X + 1, previousPlayerPosition.Y - 1]);
             //fifthDebugLabel.Text = string.Format("B L H: {0}", usableHeightMapValues[previousPlayerPosition.X, previousPlayerPosition.Y]);
@@ -780,8 +802,6 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             }
         }
 
-        // Tomorrow, work on trying to get the time "cost" accounted for pixel climate, season, and weather, also get weather working and considered on map, etc.
-        // When that is done, do testing and make github commits and such. Then if that is mostly good, start maybe doing similar for line of sight value refinement and such, will see.
         public int CalculatePixelTravelTime(bool onCurrentPixel)
         {
             // Eventually include climate and current weather condition as factors to increase/decrease travel time.
@@ -814,6 +834,23 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
                     travMod += 15; break;
             }
 
+            // Modify travMod based on the currentWeather. Weather will likely have much more effect on other features to still be added, like fatigue/health drain and visibility, etc.
+            switch (currentWeather)
+            {
+                case OOTMain.OOTWeatherType.Sunny:
+                case OOTMain.OOTWeatherType.Cloudy:
+                case OOTMain.OOTWeatherType.Overcast:
+                case OOTMain.OOTWeatherType.Fog:
+                default: travMod += 0; break;
+                case OOTMain.OOTWeatherType.Rain: travMod += 1; break;
+                case OOTMain.OOTWeatherType.Sandstorm:
+                case OOTMain.OOTWeatherType.Thunderstorm:
+                case OOTMain.OOTWeatherType.Hail: travMod += 2; break;
+                case OOTMain.OOTWeatherType.Snow: travMod += 4; break;
+                case OOTMain.OOTWeatherType.Typhoon: travMod += 5; break;
+                case OOTMain.OOTWeatherType.Blizzard: travMod += 8; break;
+            }
+
             int delta = 0;
             if (onCurrentPixel == false)
             {
@@ -826,23 +863,6 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             int travTime = travelMode == TravelMode.Reckless ? Mathf.RoundToInt(travMod * 0.65f) : travMod;
             if (travTime < 2) { travTime = 2; } // Don't allow travTime from going below 2
             return travTime;
-        }
-
-        /// <summary>
-        /// All the vanilla Daggerfall climate types, assigned their associated byte data value.
-        /// </summary>
-        public enum ClimateTypes
-        {
-            Ocean_Water = 223,
-            Desert_South = 224,
-            Hot_Desert_South_East = 225,
-            Mountains = 226,
-            Rainforest = 227,
-            Swamp = 228,
-            SubTropical = 229,
-            Woodland_Hills = 230,
-            Temperate_Woodland = 231,
-            Haunted_Woodland = 232,
         }
 
         /// <summary>
@@ -980,6 +1000,7 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             // Draw "Player Position Crosshair" where the player is meant to currently be
             DrawPlayerCrosshair(width, height, whiteColor, ref travelPathPixelBuffer);
 
+            // Tomorrow, work on this somehow to get the "map reveal" area more refined, similar to the travel time stuff, will see.
             // Reveal/update areas of the map the player has explored and removed the fog of war from
             int playX = previousPlayerPosition.X;
             int playY = previousPlayerPosition.Y;
@@ -1195,6 +1216,8 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
         private void performFastTravel() // Maybe work on getting this to function again tomorrow or next time, with the more exact screen pixel positions, will see.
         {
             isPlayerTraveling = false;
+            weatherChangeTimer = 0;
+            weatherUnchangedCounter = 0;
             currentPixelTravelTime = 0;
             nextPixelTravelTime = 0;
 
@@ -1228,6 +1251,8 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
 
             // Halt random enemy spawns for next playerEntity update so player isn't bombarded by spawned enemies at the end of a long trip
             GameManager.Instance.PlayerEntity.PreventEnemySpawns = true;
+
+            OOTMain.SetRealWeather(currentWeather);
 
             // Vampires and characters with Damage from Sunlight disadvantage never arrive between 6am and 6pm regardless of travel type
             // Otherwise raise arrival time to just after 7am if cautious travel would arrive at night
@@ -2391,7 +2416,7 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
 
         private void CycleTravelType_OnMouseClick(BaseScreenComponent sender, Vector2 position)
         {
-            if (currentPixelClimate == ClimateTypes.Ocean_Water)
+            if (currentPixelClimate == OOTMain.ClimateType.Ocean_Water)
             {
                 if (travelType == TravelType.Swimming) { travelType = TravelType.Raft; }
                 else if (travelType == TravelType.Raft) { travelType = TravelType.Boat; }

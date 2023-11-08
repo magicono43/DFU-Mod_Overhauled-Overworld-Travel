@@ -3,7 +3,7 @@
 // License:         MIT License (http://www.opensource.org/licenses/mit-license.php)
 // Author:          Kirk.O
 // Created On: 	    8/3/2023, 8:40 PM
-// Last Edit:		11/2/2023, 9:50 PM
+// Last Edit:		11/7/2023, 9:20 PM
 // Version:			1.00
 // Special Thanks:  
 // Modifier:
@@ -200,6 +200,14 @@ namespace OverhauledOverworldTravel
                 DaggerfallUI.UIManager.PushWindow(ootWorldMapWindow);
                 return "Complete";
             }
+        }
+
+        public static bool CoinFlip()
+        {
+            if (UnityEngine.Random.Range(0, 1 + 1) == 0)
+                return false;
+            else
+                return true;
         }
     }
 }

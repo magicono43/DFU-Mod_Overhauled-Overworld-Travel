@@ -3,7 +3,7 @@
 // License:         MIT License (http://www.opensource.org/licenses/mit-license.php)
 // Author:          Kirk.O
 // Created On: 	    8/3/2023, 8:40 PM
-// Last Edit:		11/7/2023, 9:20 PM
+// Last Edit:		11/8/2023, 11:50 PM
 // Version:			1.00
 // Special Thanks:  
 // Modifier:
@@ -27,7 +27,7 @@ namespace OverhauledOverworldTravel
         static Mod mod;
 
         // Options
-        //public static bool TogglePotionsGlassBottles { get; set; }
+        public static int ViewRadiusValue { get; set; }
 
         // Mod Compatibility Check Values
         public static bool ClimatesAndCaloriesCheck { get; set; }
@@ -147,7 +147,7 @@ namespace OverhauledOverworldTravel
 
         static void LoadSettings(ModSettings modSettings, ModSettingsChange change)
         {
-            //TogglePotionsGlassBottles = mod.GetSettings().GetValue<bool>("ToggleInteractables", "PotionsPoisonsAlcoholGlass-Bottles");
+            ViewRadiusValue = mod.GetSettings().GetValue<int>("Testing", "ViewRangeRadius");
         }
 
         private void ModCompatibilityChecking()

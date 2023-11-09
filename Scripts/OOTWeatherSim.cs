@@ -182,6 +182,25 @@ namespace OverhauledOverworldTravel
             return weather;
         }
 
+        public static int CalculateWeatherVisionMod(OOTWeatherType weather)
+        {
+            switch (weather)
+            {
+                case OOTWeatherType.Sunny:
+                case OOTWeatherType.Cloudy:
+                case OOTWeatherType.Overcast:
+                default: return 0;
+                case OOTWeatherType.Rain:
+                case OOTWeatherType.Snow:
+                case OOTWeatherType.Hail: return -2;
+                case OOTWeatherType.Thunderstorm:
+                case OOTWeatherType.Typhoon: return -3;
+                case OOTWeatherType.Fog:
+                case OOTWeatherType.Sandstorm:
+                case OOTWeatherType.Blizzard: return -4;
+            }
+        }
+
         // Converts current map weather to an existing vanilla equivalent, then sets that as the current weather in-game.
         public static void SetRealWeather(OOTWeatherType weather)
         {

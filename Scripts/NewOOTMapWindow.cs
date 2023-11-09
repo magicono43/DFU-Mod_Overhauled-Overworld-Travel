@@ -21,6 +21,7 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
     public class NewOOTMapWindow : DaggerfallPopupWindow
     {
         public int Speed { get { return GameManager.Instance.PlayerEntity.Stats.LiveSpeed - 50; } } // This stuff will eventually be moved to another "FormulaHelper" type script.
+        public int Willpower { get { return GameManager.Instance.PlayerEntity.Stats.LiveWillpower - 50; } }
         public int RunSkill { get { return GameManager.Instance.PlayerEntity.Skills.GetLiveSkillValue(DFCareer.Skills.Running); } }
         public int SwimSkill { get { return GameManager.Instance.PlayerEntity.Skills.GetLiveSkillValue(DFCareer.Skills.Swimming); } }
         public int ClimbSkill { get { return GameManager.Instance.PlayerEntity.Skills.GetLiveSkillValue(DFCareer.Skills.Climbing); } }
@@ -992,6 +993,8 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
                     }
                 }
 
+                // Tomorrow, maybe try to get the destination crosshair to show up above the "fog of war" layer, but location dots will still possibly be an issue, will see how I might get around that, will see.
+                // After that, maybe to work on getting random roaming groups, enemies, encounters moving around on the map kind of like Mount & Blade? Not sure, will see. That or player vitals, not sure yet.
                 // Draw Classic Fallout system "Destination Crosshair" 15x15, where the player last clicked
                 if (lastClickedPos != Vector2.zero)
                     DrawDestinationCrosshair(width, height, redColor, ref travelPathPixelBuffer);
@@ -1000,11 +1003,11 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             // Draw "Player Position Crosshair" where the player is meant to currently be
             DrawPlayerCrosshair(width, height, whiteColor, ref travelPathPixelBuffer);
 
-            // Tomorrow, work on this somehow to get the "map reveal" area more refined, similar to the travel time stuff, will see.
             // Reveal/update areas of the map the player has explored and removed the fog of war from
             int playX = previousPlayerPosition.X;
             int playY = previousPlayerPosition.Y;
-            int radius = 22;
+            //int radius = OOTMain.ViewRadiusValue; // For testing
+            int radius = CalculateVisionRadius();
             // Attempt to map a filled circle around the player, this will be the fog of war "revealing" area
             for (int y = playY - radius; y <= playY + radius; y++)
             {
@@ -1287,6 +1290,17 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             DaggerfallUI.Instance.FadeBehaviour.FadeHUDFromBlack();
 
             //RaiseOnPostFastTravelEvent();
+        }
+
+        public int CalculateVisionRadius()
+        {
+            int avgRadius = 6;
+            int visionMod = OOTMain.CalculateWeatherVisionMod(currentWeather);
+            if (Willpower >= 0) { visionMod += Mathf.Clamp(Mathf.FloorToInt(Willpower * 0.1f), 0, 4); }
+            else { visionMod += Mathf.Clamp(Mathf.CeilToInt(Willpower * 0.1f), -4, 0); }
+            int combined = avgRadius + visionMod;
+            if (travelMode == TravelMode.Reckless) { combined = Mathf.RoundToInt(combined * 0.75f); } // Might remove this later, will see. That being punishing you for using reckless, in terms of vision range atleast.
+            return Mathf.Clamp(combined, 2, 10);
         }
 
         private string GetSuffix(int day)
@@ -1851,7 +1865,7 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             int flippedY = (int)(height - previousPlayerPosition.Y - 1); // To compensate for the pixelBuffer index starting at the opposite part of the screen as the (0, 0) origin for the screen.
             int pixelPos = (int)(flippedY * width + previousPlayerPosition.X);
 
-            for (int i = -2; i < 3; i++)
+            for (int i = -1; i < 2; i++)
             {
                 if (pixelPos + i < 0 || pixelPos + i > pixelBuffer.Length)
                     continue;
@@ -1860,7 +1874,7 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             }
             //for (int i = -3; i < 3; i++) { pixelBuffer[pixelPos - width + i] = pathColor; }
 
-            for (int i = -2; i < 3; i++)
+            for (int i = -1; i < 2; i++)
             {
                 if (pixelPos + (width * i) < 0 || pixelPos + (width * i) > pixelBuffer.Length)
                     continue;
@@ -1875,14 +1889,14 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             int flippedY = (int)(height - linePos.Y - 1); // To compensate for the pixelBuffer index starting at the opposite part of the screen as the (0, 0) origin for the screen.
             int pixelPos = (int)(flippedY * width + linePos.X);
 
-            for (int i = -1; i < 1; i++)
+            for (int i = 0; i < 1; i++)
             {
                 if (pixelPos + width + i < 0 || pixelPos + width + i > pixelBuffer.Length)
                     continue;
                 else
                     pixelBuffer[pixelPos + width + i] = pathColor;
             }
-            for (int i = -1; i < 1; i++)
+            for (int i = 0; i < 1; i++)
             {
                 if (pixelPos + i < 0 || pixelPos + i > pixelBuffer.Length)
                     continue;

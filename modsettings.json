@@ -2,155 +2,18 @@
     "Version": "1.00",
     "Sections": [
         {
-            "Name": "GoldCost",
-            "Description": "Related To Gold Cost Modifiers",
-            "IsAdvanced": false,
-            "Keys": [
-                {
-                    "Min": 0.1,
-                    "Max": 5.0,
-                    "Value": 1.0,
-                    "Name": "FinalCostMultiplier",
-                    "Description": "Modifies Final Gold Cost For Training Session.",
-                    "$version": "v1",
-                    "$type": "DaggerfallWorkshop.Game.Utility.ModSupport.ModSettings.SliderFloatKey"
-                },
-                {
-                    "Min": 1,
-                    "Max": 10,
-                    "Value": 4,
-                    "Name": "Non-MemberCostMultiplier",
-                    "Description": "Multiplies How Much More It Costs To Train In Non-Membered Factions.",
-                    "$version": "v1",
-                    "$type": "DaggerfallWorkshop.Game.Utility.ModSupport.ModSettings.SliderIntKey"
-                }
-            ],
-            "$version": "v1"
-        },
-        {
-            "Name": "MaxSkillsBasedOnQuality",
-            "Description": "Alters How High Guild Halls Can Train Based On Their Building Quality",
-            "IsAdvanced": false,
-            "Keys": [
-                {
-                    "Min": 5,
-                    "Max": 100,
-                    "Value": 35,
-                    "Name": "MaxAwfulHallsCanTrain",
-                    "Description": "Max Value That Skills Can Be Trained In The Worst Quality Buildings.",
-                    "$version": "v1",
-                    "$type": "DaggerfallWorkshop.Game.Utility.ModSupport.ModSettings.SliderIntKey"
-                },
-                {
-                    "Min": 5,
-                    "Max": 100,
-                    "Value": 50,
-                    "Name": "MaxPoorHallsCanTrain",
-                    "Description": "Max Value That Skills Can Be Trained In Poor Quality Buildings.",
-                    "$version": "v1",
-                    "$type": "DaggerfallWorkshop.Game.Utility.ModSupport.ModSettings.SliderIntKey"
-                },
-                {
-                    "Min": 5,
-                    "Max": 100,
-                    "Value": 65,
-                    "Name": "MaxDecentHallsCanTrain",
-                    "Description": "Max Value That Skills Can Be Trained In Decent Quality Buildings.",
-                    "$version": "v1",
-                    "$type": "DaggerfallWorkshop.Game.Utility.ModSupport.ModSettings.SliderIntKey"
-                },
-                {
-                    "Min": 5,
-                    "Max": 100,
-                    "Value": 75,
-                    "Name": "MaxGoodHallsCanTrain",
-                    "Description": "Max Value That Skills Can Be Trained In Good Quality Buildings.",
-                    "$version": "v1",
-                    "$type": "DaggerfallWorkshop.Game.Utility.ModSupport.ModSettings.SliderIntKey"
-                },
-                {
-                    "Min": 5,
-                    "Max": 100,
-                    "Value": 85,
-                    "Name": "MaxGreatHallsCanTrain",
-                    "Description": "Max Value That Skills Can Be Trained In The Best Quality Buildings.",
-                    "$version": "v1",
-                    "$type": "DaggerfallWorkshop.Game.Utility.ModSupport.ModSettings.SliderIntKey"
-                }
-            ],
-            "$version": "v1"
-        },
-        {
-            "Name": "MaxSkillsCanBeTrain",
-            "Description": "Alters How High Skills Are Allowed To Be Trained To In General",
-            "IsAdvanced": false,
-            "Keys": [
-                {
-                    "Min": 5,
-                    "Max": 100,
-                    "Value": 85,
-                    "Name": "MaxPossibleTraining",
-                    "Description": "The Max Value That Skills Can Be Trained To.",
-                    "$version": "v1",
-                    "$type": "DaggerfallWorkshop.Game.Utility.ModSupport.ModSettings.SliderIntKey"
-                }
-            ],
-            "$version": "v1"
-        },
-        {
-            "Name": "TimeRelated",
-            "Description": "Alters Time Required Between Sessions & Time Passed During Sessions",
+            "Name": "Testing",
+            "Description": "Related To Testing Properties",
             "IsAdvanced": false,
             "Keys": [
                 {
                     "Min": 0,
-                    "Max": 24,
-                    "Value": 12,
-                    "Name": "HoursNeededBetweenSessions",
-                    "Description": "How Many Hours Need To Pass Before You Can Train Again.",
+                    "Max": 40,
+                    "Value": 22,
+                    "Name": "ViewRangeRadius",
+                    "Description": "Size of The Viewing Radius/Range.",
                     "$version": "v1",
                     "$type": "DaggerfallWorkshop.Game.Utility.ModSupport.ModSettings.SliderIntKey"
-                },
-                {
-                    "Min": 0,
-                    "Max": 24,
-                    "Value": 3,
-                    "Name": "HoursPassedDuringSessions",
-                    "Description": "How Many Hours Each Training Session Takes.",
-                    "$version": "v1",
-                    "$type": "DaggerfallWorkshop.Game.Utility.ModSupport.ModSettings.SliderIntKey"
-                }
-            ],
-            "$version": "v1"
-        },
-        {
-            "Name": "TrainingExperience",
-            "Description": "Related To How Much Skill \"XP\" Each Session Gives",
-            "IsAdvanced": false,
-            "Keys": [
-                {
-                    "Min": 0.1,
-                    "Max": 5.0,
-                    "Value": 1.0,
-                    "Name": "TrainedXPMultiplier",
-                    "Description": "Modifies Final Skill XP Value Of Each Training Session.",
-                    "$version": "v1",
-                    "$type": "DaggerfallWorkshop.Game.Utility.ModSupport.ModSettings.SliderFloatKey"
-                }
-            ],
-            "$version": "v1"
-        },
-        {
-            "Name": "VitalsRelated",
-            "Description": "Related To How Much Your Body Is Taxed During Sessions",
-            "IsAdvanced": false,
-            "Keys": [
-                {
-                    "Value": true,
-                    "Name": "AllowHealthMagicDamage",
-                    "Description": "Whether Some Training Sessions Can Drain Your Health & Magic.",
-                    "$version": "v1",
-                    "$type": "DaggerfallWorkshop.Game.Utility.ModSupport.ModSettings.ToggleKey"
                 }
             ],
             "$version": "v1"

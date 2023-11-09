@@ -85,6 +85,10 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
         Texture2D fogOfWarTexture;
         Color32[] fogOfWarPixelBuffer;
 
+        Panel destinationCrosshairOverlayPanel;
+        Texture2D destinationCrosshairTexture;
+        Color32[] destinationCrosshairPixelBuffer;
+
         Panel searchHighlightOverlayPanel;
         Texture2D searchHighlightTexture;
         Color32[] searchHighlightPixelBuffer;
@@ -335,6 +339,16 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             fogOfWarPixelBuffer = new Color32[(int)rectWorldMap.width * (int)rectWorldMap.height];
             fogOfWarTexture = new Texture2D((int)rectWorldMap.width, (int)rectWorldMap.height, TextureFormat.ARGB32, false);
             fogOfWarTexture.filterMode = FilterMode.Point;
+
+            // Overlay for the destination crosshair panel
+            destinationCrosshairOverlayPanel = DaggerfallUI.AddPanel(rectWorldMap, worldMapPanel);
+            destinationCrosshairOverlayPanel.HorizontalAlignment = HorizontalAlignment.Center;
+            destinationCrosshairOverlayPanel.VerticalAlignment = VerticalAlignment.Middle;
+
+            // Setup pixel buffer and texture for destination crosshair
+            destinationCrosshairPixelBuffer = new Color32[(int)rectWorldMap.width * (int)rectWorldMap.height];
+            destinationCrosshairTexture = new Texture2D((int)rectWorldMap.width, (int)rectWorldMap.height, TextureFormat.ARGB32, false);
+            destinationCrosshairTexture.filterMode = FilterMode.Point;
 
             // Overlay for the search highlight panel
             searchHighlightOverlayPanel = DaggerfallUI.AddPanel(rectWorldMap, worldMapPanel);
@@ -948,6 +962,7 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             int width = 1000;
             int height = 500;
             Array.Clear(travelPathPixelBuffer, 0, travelPathPixelBuffer.Length);
+            Array.Clear(destinationCrosshairPixelBuffer, 0, destinationCrosshairPixelBuffer.Length);
 
             // Fills "fog of war" pixel buffer entirely with black, then later "chip away" this color to hopefully reduce overall operations, will see.
             for (int i = 0; i < fogOfWarPixelBuffer.Length; i++)
@@ -993,11 +1008,9 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
                     }
                 }
 
-                // Tomorrow, maybe try to get the destination crosshair to show up above the "fog of war" layer, but location dots will still possibly be an issue, will see how I might get around that, will see.
-                // After that, maybe to work on getting random roaming groups, enemies, encounters moving around on the map kind of like Mount & Blade? Not sure, will see. That or player vitals, not sure yet.
                 // Draw Classic Fallout system "Destination Crosshair" 15x15, where the player last clicked
                 if (lastClickedPos != Vector2.zero)
-                    DrawDestinationCrosshair(width, height, redColor, ref travelPathPixelBuffer);
+                    DrawDestinationCrosshair(width, height, redColor, ref destinationCrosshairPixelBuffer);
             }
 
             // Draw "Player Position Crosshair" where the player is meant to currently be
@@ -1052,10 +1065,13 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             travelPathTexture.Apply();
             fogOfWarTexture.SetPixels32(fogOfWarPixelBuffer);
             fogOfWarTexture.Apply();
+            destinationCrosshairTexture.SetPixels32(destinationCrosshairPixelBuffer);
+            destinationCrosshairTexture.Apply();
 
             // Present texture
             travelPathOverlayPanel.BackgroundTexture = travelPathTexture;
             fogOfWarOverlayPanel.BackgroundTexture = fogOfWarTexture;
+            destinationCrosshairOverlayPanel.BackgroundTexture = destinationCrosshairTexture;
         }
 
         void UpdateLocationSearchCrosshairTexture(DFPosition locPos = null)
@@ -1592,6 +1608,7 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             travelPathOverlayPanel.BackgroundTextureLayout = BackgroundLayout.StretchToFill;
             mouseCursorHitboxOverlayPanel.BackgroundTextureLayout = BackgroundLayout.StretchToFill;
             fogOfWarOverlayPanel.BackgroundTextureLayout = BackgroundLayout.StretchToFill;
+            destinationCrosshairOverlayPanel.BackgroundTextureLayout = BackgroundLayout.StretchToFill;
             searchHighlightOverlayPanel.BackgroundTextureLayout = BackgroundLayout.StretchToFill;
             searchCrosshairOverlayPanel.BackgroundTextureLayout = BackgroundLayout.StretchToFill;
         }
@@ -1610,6 +1627,8 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             mouseCursorHitboxOverlayPanel.BackgroundCroppedRect = worldMapNewRect;
             fogOfWarOverlayPanel.BackgroundTextureLayout = BackgroundLayout.Cropped;
             fogOfWarOverlayPanel.BackgroundCroppedRect = worldMapNewRect;
+            destinationCrosshairOverlayPanel.BackgroundTextureLayout = BackgroundLayout.Cropped;
+            destinationCrosshairOverlayPanel.BackgroundCroppedRect = worldMapNewRect;
             searchHighlightOverlayPanel.BackgroundTextureLayout = BackgroundLayout.Cropped;
             searchHighlightOverlayPanel.BackgroundCroppedRect = worldMapNewRect;
             searchCrosshairOverlayPanel.BackgroundTextureLayout = BackgroundLayout.Cropped;
@@ -1916,7 +1935,12 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
                 if (pixelPos + i < 0 || pixelPos + i > pixelBuffer.Length)
                     continue;
                 else
-                    pixelBuffer[pixelPos + i] = pathColor;
+                {
+                    if (i == 0)
+                        continue;
+                    else
+                        pixelBuffer[pixelPos + i] = pathColor;
+                }
             }
             //for (int i = -3; i < 3; i++) { pixelBuffer[pixelPos - width + i] = pathColor; }
 
@@ -1925,7 +1949,12 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
                 if (pixelPos + (width * i) < 0 || pixelPos + (width * i) > pixelBuffer.Length)
                     continue;
                 else
-                    pixelBuffer[pixelPos + (width * i)] = pathColor;
+                {
+                    if (i == 0)
+                        continue;
+                    else
+                        pixelBuffer[pixelPos + (width * i)] = pathColor;
+                }
             }
             //for (int i = -3; i < 3; i++) { pixelBuffer[pixelPos + (width * i) - 1] = pathColor; }
         }

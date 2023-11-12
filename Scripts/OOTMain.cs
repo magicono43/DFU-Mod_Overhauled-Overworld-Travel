@@ -3,7 +3,7 @@
 // License:         MIT License (http://www.opensource.org/licenses/mit-license.php)
 // Author:          Kirk.O
 // Created On: 	    8/3/2023, 8:40 PM
-// Last Edit:		11/9/2023, 10:00 AM
+// Last Edit:		11/11/2023, 10:50 PM
 // Version:			1.00
 // Special Thanks:  
 // Modifier:
@@ -16,6 +16,9 @@ using DaggerfallWorkshop.Game.Entity;
 using DaggerfallWorkshop.Game.UserInterfaceWindows;
 using System;
 using Wenzil.Console;
+using DaggerfallWorkshop;
+using DaggerfallConnect.Utility;
+using System.Collections.Generic;
 
 namespace OverhauledOverworldTravel
 {
@@ -53,6 +56,8 @@ namespace OverhauledOverworldTravel
             mod = initParams.Mod;
             var go = new GameObject(mod.Title);
             go.AddComponent<OOTMain>(); // Add script to the scene.
+
+            go.AddComponent<OOTWanderingEncounterAI>();
 
             mod.LoadSettingsCallback = LoadSettings; // To enable use of the "live settings changes" feature in-game.
 
@@ -208,6 +213,70 @@ namespace OverhauledOverworldTravel
                 return false;
             else
                 return true;
+        }
+
+        public static void CreateWanderingEncounterObjectAI(DFPosition dfPos)
+        {
+            ulong loadID = DaggerfallUnity.NextUID;
+            string encounterName = "OOT_Wandering_Encounter-" + loadID;
+            GameObject go = new GameObject(encounterName);
+
+            if (Instance != null)
+                go.transform.parent = Instance.transform;
+            else
+                return;
+
+            OOTWanderingEncounterAI encounterObj = go.AddComponent<OOTWanderingEncounterAI>();
+            encounterObj.LoadID = loadID;
+            encounterObj.EncounterName = encounterName;
+            encounterObj.PreviousEncounterPosition = dfPos;
+            encounterObj.EncounterDestination = GetEncounterDestinationPos(dfPos);
+
+            NewOOTMapWindow.Instance.WanderingEncountersList.Add(go);
+        }
+
+        public static DFPosition GetEncounterDestinationPos(DFPosition startPos)
+        {
+            int startX = startPos.X;
+            int startY = startPos.Y;
+            //int radius = OOTMain.ViewRadiusValue; // For testing
+            int radius = 40;
+            int width = 1000;
+            int height = 500;
+
+            byte[,] mapCanvas2D = new byte[width, height];
+            // Determine what pixels within the area of a square around the player's current position are "valid" for wandering encounters to be created on.
+            for (int y = startY - radius; y <= startY + radius; y++)
+            {
+                for (int x = startX - radius; x <= startX + radius; x++)
+                {
+                    // Ensure the x and y coordinates are within the pixel buffer bounds
+                    if (x >= 0 && x < width && y >= 0 && y < height)
+                    {
+                        if ((ClimateType)NewOOTMapWindow.Instance.UsableClimateMapValues[x, y] != ClimateType.Ocean_Water)
+                        {
+                            mapCanvas2D[x, y] = 1;
+                        }
+                    }
+                }
+            }
+
+            List<DFPosition> validPosList = new List<DFPosition>();
+            // Fill a list with all the valid DFPositions, that being any marked with a "1"
+            for (int y = 0; y < height; y++)
+            {
+                for (int x = 0; x < width; x++)
+                {
+                    if (mapCanvas2D[x, y] == 1)
+                    {
+                        DFPosition dfPos = new DFPosition(x, y);
+                        validPosList.Add(dfPos);
+                    }
+                }
+            }
+
+            int randIndex = UnityEngine.Random.Range(0, validPosList.Count);
+            return new DFPosition(validPosList[randIndex].X, validPosList[randIndex].Y);
         }
     }
 }

@@ -20,7 +20,8 @@
         "Assets/Game/Mods/DFU-Mod_Overhauled-Overworld-Travel/Textures/Concept_Borders_Toggle_Icon_1.png",
         "Assets/Game/Mods/DFU-Mod_Overhauled-Overworld-Travel/Textures/1000x500_Unexplored_Map_Overlay.png",
         "Assets/Game/Mods/DFU-Mod_Overhauled-Overworld-Travel/Scripts/OOTSaveData.cs",
-        "Assets/Game/Mods/DFU-Mod_Overhauled-Overworld-Travel/Scripts/OOTWeatherSim.cs"
+        "Assets/Game/Mods/DFU-Mod_Overhauled-Overworld-Travel/Scripts/OOTWeatherSim.cs",
+        "Assets/Game/Mods/DFU-Mod_Overhauled-Overworld-Travel/Scripts/OOTWanderingEncounterAI.cs"
     ],
     "Dependencies": []
 }

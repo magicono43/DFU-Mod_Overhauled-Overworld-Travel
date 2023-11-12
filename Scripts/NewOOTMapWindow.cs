@@ -1,7 +1,6 @@
 using UnityEngine;
 using DaggerfallWorkshop.Utility;
 using DaggerfallWorkshop.Game.UserInterface;
-using DaggerfallWorkshop.Game.Entity;
 using OverhauledOverworldTravel;
 using System;
 using System.Collections.Generic;
@@ -9,7 +8,6 @@ using DaggerfallConnect;
 using DaggerfallWorkshop.Utility.AssetInjection;
 using System.IO;
 using DaggerfallConnect.Arena2;
-using System.Linq;
 using DaggerfallConnect.Utility;
 using DaggerfallWorkshop.Game.Utility;
 
@@ -20,6 +18,8 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
     /// </summary>
     public class NewOOTMapWindow : DaggerfallPopupWindow
     {
+        public static NewOOTMapWindow Instance;
+
         public int Speed { get { return GameManager.Instance.PlayerEntity.Stats.LiveSpeed - 50; } } // This stuff will eventually be moved to another "FormulaHelper" type script.
         public int Willpower { get { return GameManager.Instance.PlayerEntity.Stats.LiveWillpower - 50; } }
         public int RunSkill { get { return GameManager.Instance.PlayerEntity.Skills.GetLiveSkillValue(DFCareer.Skills.Running); } }
@@ -30,6 +30,7 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
 
         public static Color32 redColor = new Color32(255, 0, 0, 255);
         public static Color32 blueColor = new Color32(0, 0, 255, 255);
+        public static Color32 yellowColor = new Color32(255, 255, 0, 255);
         public static Color32 blackColor = new Color32(0, 0, 0, 255);
         public static Color32 whiteColor = new Color32(255, 255, 255, 255);
         public static Color32 dimRedColor = new Color32(255, 0, 0, 85);
@@ -84,6 +85,10 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
         Panel fogOfWarOverlayPanel;
         Texture2D fogOfWarTexture;
         Color32[] fogOfWarPixelBuffer;
+
+        Panel encounterOverlayPanel;
+        Texture2D encounterTexture;
+        Color32[] encounterPixelBuffer;
 
         Panel destinationCrosshairOverlayPanel;
         Texture2D destinationCrosshairTexture;
@@ -180,6 +185,8 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
         int weatherChangeTimer = 0;
         int weatherUnchangedCounter = 0;
 
+        int spawnEncountersTimer = 0;
+
         int currentPixelTravelTime = 0;
         int nextPixelTravelTime = 0;
         byte currentPixelHeight = 0;
@@ -194,6 +201,24 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
         private int maxMatchingResults = 1000;
         private string distanceRegionName = null;
         private IDistance distance;
+
+        List<GameObject> wanderingEncountersList = new List<GameObject>();
+
+        #region Properties
+
+        public byte[,] UsableClimateMapValues
+        {
+            get { return usableClimateMapValues; }
+            set { usableClimateMapValues = value; }
+        }
+
+        public List<GameObject> WanderingEncountersList
+        {
+            get { return wanderingEncountersList; }
+            set { wanderingEncountersList = value; }
+        }
+
+        #endregion
 
         public static Vector2 GetWorldMapPanelSize()
         {
@@ -340,6 +365,16 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             fogOfWarTexture = new Texture2D((int)rectWorldMap.width, (int)rectWorldMap.height, TextureFormat.ARGB32, false);
             fogOfWarTexture.filterMode = FilterMode.Point;
 
+            // Overlay for the encounters panel
+            encounterOverlayPanel = DaggerfallUI.AddPanel(rectWorldMap, worldMapPanel);
+            encounterOverlayPanel.HorizontalAlignment = HorizontalAlignment.Center;
+            encounterOverlayPanel.VerticalAlignment = VerticalAlignment.Middle;
+
+            // Setup pixel buffer and texture for encounters
+            encounterPixelBuffer = new Color32[(int)rectWorldMap.width * (int)rectWorldMap.height];
+            encounterTexture = new Texture2D((int)rectWorldMap.width, (int)rectWorldMap.height, TextureFormat.ARGB32, false);
+            encounterTexture.filterMode = FilterMode.Point;
+
             // Overlay for the destination crosshair panel
             destinationCrosshairOverlayPanel = DaggerfallUI.AddPanel(rectWorldMap, worldMapPanel);
             destinationCrosshairOverlayPanel.HorizontalAlignment = HorizontalAlignment.Center;
@@ -363,6 +398,8 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             // Panel housing the button bar on the left of the screen
             leftButtonsPanel = DaggerfallUI.AddPanel(new Rect(0, 225, 105, 265), worldMapPanel);
             leftButtonsPanel.BackgroundColor = new Color(0.9f, 0.1f, 0.5f, 0.75f); // For testing purposes
+
+            // Tomorrow, add a UI button that will work as a "wait/pass-time" function. So you can still pass time or let encounters move around while you stay in the same spot, etc.
 
             // Testing First UI Button in left panel
             Button testingUIButton1 = CreateGenericTextButton(new Rect(2, 3, 100, 50), leftButtonsPanel, (int)SoundClips.AnimalPig, "Borders", 3.5f);
@@ -527,6 +564,8 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
 
             UpdatePlayerTravelDotsTexture();
             TestPlacingDaggerfallLocationDots();
+
+            if (wanderingEncountersList.Count > 0) { UpdateWanderingEncounterDotsTexture(); }
         }
 
         private Button CreateGenericTextButton(Rect rect, Panel parentPanel, int soundIndex, string text, float textScale)
@@ -567,6 +606,7 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             nextPlayerPosition.X = previousPlayerPosition.X;
 
             UpdatePlayerTravelDotsTexture();
+            if (wanderingEncountersList.Count > 0) { UpdateWanderingEncounterDotsTexture(); }
 
             DaggerfallUI.Instance.PlayOneShot(SoundClips.ButtonClick);
         }
@@ -594,6 +634,8 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
         public override void OnPush()
         {
             base.OnPush();
+
+            Instance = this;
 
             previousPlayerPosition = TravelTimeCalculator.GetPlayerTravelPosition();
             nextPlayerPosition = TravelTimeCalculator.GetPlayerTravelPosition();
@@ -646,6 +688,13 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             Array.Clear(usableHeightMapValues, 0, usableHeightMapValues.Length);
             Array.Clear(usableClimateMapValues, 0, usableClimateMapValues.Length);
 
+            // Will definitely need to change this later, otherwise the encounter will get destroyed too early for the fast-travel stuff and such to happen and actually create it later, etc.
+            foreach (GameObject encounter in wanderingEncountersList)
+            {
+                UnityEngine.Object.Destroy(encounter);
+            }
+            wanderingEncountersList.Clear();
+
             performFastTravel();
         }
 
@@ -680,6 +729,8 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
 
                 if (weatherChangeTimer == 0) { weatherChangeTimer = UnityEngine.Random.Range(150, 301); } // 5-10 hours between possible weather change checks.
 
+                if (spawnEncountersTimer == 0) { spawnEncountersTimer = UnityEngine.Random.Range(300, 361); } // 10-12 hours between possible wandering encounter spawns.
+
                 if (currentPixelTravelTime == 0) { currentPixelTravelTime = CalculatePixelTravelTime(true); }
 
                 if (nextPixelTravelTime == 0) { nextPixelTravelTime = CalculatePixelTravelTime(false); }
@@ -690,6 +741,9 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
 
                 --weatherChangeTimer;
                 if (weatherChangeTimer <= 0) { currentWeather = OOTMain.RollForWeatherChange(currentWeather, currentPixelClimate, OOTMain.GetSeasonFromDFSeconds(dateTimeInSeconds), ref weatherUnchangedCounter); }
+
+                --spawnEncountersTimer;
+                if (spawnEncountersTimer <= 0) { AttemptToSpawnWanderingEncounters(); }
 
                 if (currentPixelTravelTime <= 0)
                 {
@@ -730,6 +784,7 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
                     }
 
                     UpdatePlayerTravelDotsTexture();
+                    if (wanderingEncountersList.Count > 0) { UpdateWanderingEncounterDotsTexture(); }
                 }
             }
 
@@ -954,6 +1009,7 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
                 Debug.LogFormat("Clicked This Spot: x:{0} y:{1}", clickedPos.x, clickedPos.y);
 
                 UpdatePlayerTravelDotsTexture();
+                if (wanderingEncountersList.Count > 0) { UpdateWanderingEncounterDotsTexture(); }
             }
         }
 
@@ -1072,6 +1128,33 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             travelPathOverlayPanel.BackgroundTexture = travelPathTexture;
             fogOfWarOverlayPanel.BackgroundTexture = fogOfWarTexture;
             destinationCrosshairOverlayPanel.BackgroundTexture = destinationCrosshairTexture;
+        }
+
+        void UpdateWanderingEncounterDotsTexture()
+        {
+            int width = 1000;
+            int height = 500;
+
+            Array.Clear(encounterPixelBuffer, 0, encounterPixelBuffer.Length);
+
+            if (wanderingEncountersList.Count <= 0)
+                return;
+
+            // Loop through all currently existing wandering encounters
+            foreach (GameObject go in wanderingEncountersList)
+            {
+                OOTWanderingEncounterAI encounter = go.GetComponent<OOTWanderingEncounterAI>();
+                Color32 color = encounter.DestinationReached ? yellowColor : redColor;
+                // Draw "Wandering Encounter Position Crosshair" where the current instance of this encounter is meant to be
+                DrawWanderingEncounterCrosshair(encounter.PreviousEncounterPosition, width, height, color, ref encounterPixelBuffer);
+            }
+
+            // Apply updated color array to texture
+            encounterTexture.SetPixels32(encounterPixelBuffer);
+            encounterTexture.Apply();
+
+            // Present texture
+            encounterOverlayPanel.BackgroundTexture = encounterTexture;
         }
 
         void UpdateLocationSearchCrosshairTexture(DFPosition locPos = null)
@@ -1237,6 +1320,7 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             isPlayerTraveling = false;
             weatherChangeTimer = 0;
             weatherUnchangedCounter = 0;
+            spawnEncountersTimer = 0;
             currentPixelTravelTime = 0;
             nextPixelTravelTime = 0;
 
@@ -1248,6 +1332,7 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             nextPlayerPosition.X = previousPlayerPosition.X;
 
             UpdatePlayerTravelDotsTexture();
+            if (wanderingEncountersList.Count > 0) { UpdateWanderingEncounterDotsTexture(); }
 
             DaggerfallUI.Instance.FadeBehaviour.SmashHUDToBlack();
 
@@ -1608,6 +1693,7 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             travelPathOverlayPanel.BackgroundTextureLayout = BackgroundLayout.StretchToFill;
             mouseCursorHitboxOverlayPanel.BackgroundTextureLayout = BackgroundLayout.StretchToFill;
             fogOfWarOverlayPanel.BackgroundTextureLayout = BackgroundLayout.StretchToFill;
+            encounterOverlayPanel.BackgroundTextureLayout = BackgroundLayout.StretchToFill;
             destinationCrosshairOverlayPanel.BackgroundTextureLayout = BackgroundLayout.StretchToFill;
             searchHighlightOverlayPanel.BackgroundTextureLayout = BackgroundLayout.StretchToFill;
             searchCrosshairOverlayPanel.BackgroundTextureLayout = BackgroundLayout.StretchToFill;
@@ -1627,6 +1713,8 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             mouseCursorHitboxOverlayPanel.BackgroundCroppedRect = worldMapNewRect;
             fogOfWarOverlayPanel.BackgroundTextureLayout = BackgroundLayout.Cropped;
             fogOfWarOverlayPanel.BackgroundCroppedRect = worldMapNewRect;
+            encounterOverlayPanel.BackgroundTextureLayout = BackgroundLayout.Cropped;
+            encounterOverlayPanel.BackgroundCroppedRect = worldMapNewRect;
             destinationCrosshairOverlayPanel.BackgroundTextureLayout = BackgroundLayout.Cropped;
             destinationCrosshairOverlayPanel.BackgroundCroppedRect = worldMapNewRect;
             searchHighlightOverlayPanel.BackgroundTextureLayout = BackgroundLayout.Cropped;
@@ -1707,6 +1795,86 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
 
             // Present texture
             mouseCursorHitboxOverlayPanel.BackgroundTexture = mouseCursorHitboxTexture;
+        }
+
+        public void AttemptToSpawnWanderingEncounters()
+        {
+            int playX = previousPlayerPosition.X;
+            int playY = previousPlayerPosition.Y;
+            //int radius = OOTMain.ViewRadiusValue; // For testing
+            int radius = 40;
+            int width = 1000;
+            int height = 500;
+
+            // Later on, turn these loops into their own methods, then just call those to hopefully make this cleaner.
+
+            if (wanderingEncountersList.Count >= 15) // Just for testing atm.
+                return;
+
+            byte[,] mapCanvas2D = new byte[width, height];
+            // Determine what pixels within the area of a square around the player's current position are "valid" for wandering encounters to be created on.
+            for (int y = playY - radius; y <= playY + radius; y++)
+            {
+                for (int x = playX - radius; x <= playX + radius; x++)
+                {
+                    // Ensure the x and y coordinates are within the pixel buffer bounds
+                    if (x >= 0 && x < width && y >= 0 && y < height)
+                    {
+                        if ((OOTMain.ClimateType)usableClimateMapValues[x, y] != OOTMain.ClimateType.Ocean_Water)
+                        {
+                            mapCanvas2D[x, y] = 1;
+                        }
+                    }
+                }
+            }
+
+            List<DFPosition> validPosList = new List<DFPosition>();
+            // Fill a list with all the valid DFPositions, that being any marked with a "1"
+            for (int y = 0; y < height; y++)
+            {
+                for (int x = 0; x < width; x++)
+                {
+                    if (mapCanvas2D[x, y] == 1)
+                    {
+                        DFPosition dfPos = new DFPosition(x, y);
+                        validPosList.Add(dfPos);
+                    }
+                }
+            }
+
+            List<DFPosition> randomPosList = new List<DFPosition>();
+            // Randomly roll values within the index ranges "validPosList" has, then "clone" those values to randomPosList.
+            for (int i = 0; i < 5; i++)
+            {
+                int randIndex = UnityEngine.Random.Range(0, validPosList.Count);
+                randomPosList.Add(new DFPosition(validPosList[randIndex].X, validPosList[randIndex].Y));
+            }
+
+            List<DFPosition> selectedPosList = new List<DFPosition>();
+            // Filter out repeated position values in "randomPosList", if they are found to be unique, then clone those values to selectedPosList.
+            for (int i = 0; i < randomPosList.Count; i++)
+            {
+                bool addThis = true;
+                for (int k = 0; k < selectedPosList.Count; k++)
+                {
+                    if (selectedPosList[k].X == randomPosList[i].X && selectedPosList[k].Y == randomPosList[i].Y)
+                    {
+                        addThis = false;
+                        break;
+                    }
+                }
+
+                if (addThis)
+                {
+                    selectedPosList.Add(new DFPosition(randomPosList[i].X, randomPosList[i].Y));
+                }
+            }
+
+            // Now that we have a list of positions to use, finally use those values to create some "Wandering Encounter" gameobject instances.
+            foreach (DFPosition dfPos in selectedPosList)
+            {
+                OOTMain.CreateWanderingEncounterObjectAI(dfPos);
+            }
         }
 
         public void PromptLocationSearch(int regionIndex, string regionName)
@@ -1957,6 +2125,34 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
                 }
             }
             //for (int i = -3; i < 3; i++) { pixelBuffer[pixelPos + (width * i) - 1] = pathColor; }
+        }
+
+        public void DrawWanderingEncounterCrosshair(DFPosition encounterPos, int width, int height, Color32 pathColor, ref Color32[] pixelBuffer)
+        {
+            int flippedY = (int)(height - encounterPos.Y - 1); // To compensate for the pixelBuffer index starting at the opposite part of the screen as the (0, 0) origin for the screen.
+            int pixelPos = (int)(flippedY * width + encounterPos.X);
+
+            //if (pixelPos + (width * 2) + -2 < 0 || pixelPos + (width * 2) + -2 > pixelBuffer.Length) { } else { pixelBuffer[pixelPos + (width * 2) + -2] = pathColor; }
+            //if (pixelPos + (width * 2) + 2 < 0 || pixelPos + (width * 2) + 2 > pixelBuffer.Length) { } else { pixelBuffer[pixelPos + (width * 2) + 2] = pathColor; }
+            if (pixelPos + width + -1 < 0 || pixelPos + width + -1 > pixelBuffer.Length) { } else { pixelBuffer[pixelPos + width + -1] = pathColor; }
+            if (pixelPos + width + 1 < 0 || pixelPos + width + 1 > pixelBuffer.Length) { } else { pixelBuffer[pixelPos + width + 1] = pathColor; }
+            if (pixelPos < 0 || pixelPos > pixelBuffer.Length) { } else { pixelBuffer[pixelPos] = pathColor; }
+            if (pixelPos - width + -1 < 0 || pixelPos - width + -1 > pixelBuffer.Length) { } else { pixelBuffer[pixelPos - width + -1] = pathColor; }
+            if (pixelPos - width + 1 < 0 || pixelPos - width + 1 > pixelBuffer.Length) { } else { pixelBuffer[pixelPos - width + 1] = pathColor; }
+            //if (pixelPos - (width * 2) + -2 < 0 || pixelPos - (width * 2) + -2 > pixelBuffer.Length) { } else { pixelBuffer[pixelPos - (width * 2) + -2] = pathColor; }
+            //if (pixelPos - (width * 2) + 2 < 0 || pixelPos - (width * 2) + 2 > pixelBuffer.Length) { } else { pixelBuffer[pixelPos - (width * 2) + 2] = pathColor; }
+
+            /*
+            pixelBuffer[pixelPos + (width * 2) + -2] = pathColor;
+            pixelBuffer[pixelPos + (width * 2) + 2] = pathColor;
+            pixelBuffer[pixelPos + width + -1] = pathColor;
+            pixelBuffer[pixelPos + width + 1] = pathColor;
+            pixelBuffer[pixelPos] = pathColor;
+            pixelBuffer[pixelPos - width + -1] = pathColor;
+            pixelBuffer[pixelPos - width + 1] = pathColor;
+            pixelBuffer[pixelPos - (width * 2) + -2] = pathColor;
+            pixelBuffer[pixelPos - (width * 2) + 2] = pathColor;
+            */
         }
 
         // Would like to make this a bit more "fancy" looking at some point, right now just super basic large plus sign to get the point across.

@@ -174,6 +174,7 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
         public static int currentRegionIndex = -1;
 
         public static bool isPlayerTraveling = false;
+        public static bool isPlayerWaiting = false;
 
         TravelType travelType = TravelType.FootWalking;
         TravelMode travelMode = TravelMode.Cautious;
@@ -203,6 +204,8 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
         private IDistance distance;
 
         List<GameObject> wanderingEncountersList = new List<GameObject>();
+
+        // Tomorrow, now that I have the basics of the wandering encounters worked out atleast. I'm likely going to try and get the basic framework for the "vitals" tracking and stuff working as well, will see.
 
         #region Properties
 
@@ -396,10 +399,8 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             searchHighlightTexture.filterMode = FilterMode.Point;
 
             // Panel housing the button bar on the left of the screen
-            leftButtonsPanel = DaggerfallUI.AddPanel(new Rect(0, 225, 105, 265), worldMapPanel);
+            leftButtonsPanel = DaggerfallUI.AddPanel(new Rect(0, 175, 105, 318), worldMapPanel);
             leftButtonsPanel.BackgroundColor = new Color(0.9f, 0.1f, 0.5f, 0.75f); // For testing purposes
-
-            // Tomorrow, add a UI button that will work as a "wait/pass-time" function. So you can still pass time or let encounters move around while you stay in the same spot, etc.
 
             // Testing First UI Button in left panel
             Button testingUIButton1 = CreateGenericTextButton(new Rect(2, 3, 100, 50), leftButtonsPanel, (int)SoundClips.AnimalPig, "Borders", 3.5f);
@@ -420,6 +421,10 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             // Testing Fifth UI Button in left panel
             Button testingUIButton5 = CreateGenericTextButton(new Rect(2, 211, 100, 50), leftButtonsPanel, (int)SoundClips.AnimalDog, "EXIT", 4.0f);
             testingUIButton5.OnMouseClick += ExitMapWindow_OnMouseClick;
+
+            // Testing Sixth UI Button in left panel
+            Button testingUIButton14 = CreateGenericTextButton(new Rect(2, 263, 100, 50), leftButtonsPanel, (int)SoundClips.ArenaSpider, "Wait", 4.0f);
+            testingUIButton14.OnMouseClick += PassTimeWait_OnMouseClick;
 
             // Panel housing the button bar on the right of the screen
             rightButtonsPanel = DaggerfallUI.AddPanel(new Rect(895, 15, 105, 421), worldMapPanel);
@@ -647,6 +652,7 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             markSearchedLocation = false;
 
             isPlayerTraveling = false;
+            isPlayerWaiting = false;
             mapTimeHasChanged = false;
 
             // Make a "clone" of the values for this array when this window initially opens
@@ -678,6 +684,7 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             regionSelectionMode = false;
 
             isPlayerTraveling = false;
+            isPlayerWaiting = false;
             mapTimeHasChanged = false;
 
             timeSinceLastModeChange = 0;
@@ -720,72 +727,21 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
                 followingTravelLinePositionsList = new List<DFPosition>();
             }
 
+            if (isPlayerWaiting)
+            {
+                if (isPlayerTraveling)
+                {
+                    isPlayerWaiting = false;
+                }
+                else
+                {
+                    DoPlayerWaitingMethod();
+                }
+            }
+
             if (isPlayerTraveling)
             {
-                currentPixelHeight = usableHeightMapValues[previousPlayerPosition.X, previousPlayerPosition.Y];
-                nextPixelHeight = usableHeightMapValues[nextPlayerPosition.X, nextPlayerPosition.Y];
-                currentPixelClimate = (OOTMain.ClimateType)usableClimateMapValues[previousPlayerPosition.X, previousPlayerPosition.Y];
-                nextPixelClimate = (OOTMain.ClimateType)usableClimateMapValues[nextPlayerPosition.X, nextPlayerPosition.Y];
-
-                if (weatherChangeTimer == 0) { weatherChangeTimer = UnityEngine.Random.Range(150, 301); } // 5-10 hours between possible weather change checks.
-
-                if (spawnEncountersTimer == 0) { spawnEncountersTimer = UnityEngine.Random.Range(300, 361); } // 10-12 hours between possible wandering encounter spawns.
-
-                if (currentPixelTravelTime == 0) { currentPixelTravelTime = CalculatePixelTravelTime(true); }
-
-                if (nextPixelTravelTime == 0) { nextPixelTravelTime = CalculatePixelTravelTime(false); }
-
-                --currentPixelTravelTime;
-                dateTimeInSeconds += 120;
-                mapTimeHasChanged = true;
-
-                --weatherChangeTimer;
-                if (weatherChangeTimer <= 0) { currentWeather = OOTMain.RollForWeatherChange(currentWeather, currentPixelClimate, OOTMain.GetSeasonFromDFSeconds(dateTimeInSeconds), ref weatherUnchangedCounter); }
-
-                --spawnEncountersTimer;
-                if (spawnEncountersTimer <= 0) { AttemptToSpawnWanderingEncounters(); }
-
-                if (currentPixelTravelTime <= 0)
-                {
-                    currentPixelTravelTime = nextPixelTravelTime;
-                    nextPixelTravelTime = 0;
-
-                    // Automatically change currentWeather to conform to the weather restrictions of the new climate just moved into.
-                    if (currentPixelClimate != nextPixelClimate) { currentWeather = OOTMain.ConformWeatherToClimate(currentWeather, nextPixelClimate); }
-
-                    // Automatically change travelType when changing from either land to water or water to land.
-                    if (currentPixelClimate != OOTMain.ClimateType.Ocean_Water && nextPixelClimate == OOTMain.ClimateType.Ocean_Water) { travelType = TravelType.Swimming; travelTypeLabel.Text = GetTravelTypeLabelString(); }
-                    if (currentPixelClimate == OOTMain.ClimateType.Ocean_Water && nextPixelClimate != OOTMain.ClimateType.Ocean_Water) { travelType = TravelType.FootWalking; travelTypeLabel.Text = GetTravelTypeLabelString(); }
-
-                    /*DFPosition worldPos = MapsFile.MapPixelToWorldCoord(nextPlayerPosition.X, nextPlayerPosition.Y);
-                    playerGPS.WorldX = worldPos.X;
-                    playerGPS.WorldZ = worldPos.Y;
-                    playerGPS.UpdateWorldInfo();*/
-
-                    previousPlayerPosition.Y = nextPlayerPosition.Y;
-                    previousPlayerPosition.X = nextPlayerPosition.X;
-                    if (currentTravelLinePositionsList.Count > 0)
-                    {
-                        followingTravelLinePositionsList.Add(currentTravelLinePositionsList[0]);
-                        currentTravelLinePositionsList.RemoveAt(0);
-
-                        if (currentTravelLinePositionsList.Count > 0)
-                        {
-                            nextPlayerPosition.Y = currentTravelLinePositionsList[0].Y;
-                            nextPlayerPosition.X = currentTravelLinePositionsList[0].X;
-                        }
-                        else
-                        {
-                            nextPlayerPosition.Y = destinationPosition.Y;
-                            nextPlayerPosition.X = destinationPosition.X;
-                            previousPlayerPosition.Y = nextPlayerPosition.Y;
-                            previousPlayerPosition.X = nextPlayerPosition.X;
-                        }
-                    }
-
-                    UpdatePlayerTravelDotsTexture();
-                    if (wanderingEncountersList.Count > 0) { UpdateWanderingEncounterDotsTexture(); }
-                }
+                DoPlayerTravelMethod();
             }
 
             firstDebugLabel.Text = string.Format("Current Pixel Time Remaining: {0}", currentPixelTravelTime);
@@ -870,6 +826,98 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
                 else
                     regionBordersOverlayPanel.Enabled = false;
             }
+        }
+
+        void DoPlayerTravelMethod()
+        {
+            currentPixelHeight = usableHeightMapValues[previousPlayerPosition.X, previousPlayerPosition.Y];
+            nextPixelHeight = usableHeightMapValues[nextPlayerPosition.X, nextPlayerPosition.Y];
+            currentPixelClimate = (OOTMain.ClimateType)usableClimateMapValues[previousPlayerPosition.X, previousPlayerPosition.Y];
+            nextPixelClimate = (OOTMain.ClimateType)usableClimateMapValues[nextPlayerPosition.X, nextPlayerPosition.Y];
+
+            if (weatherChangeTimer == 0) { weatherChangeTimer = UnityEngine.Random.Range(150, 301); } // 5-10 hours between possible weather change checks.
+
+            if (spawnEncountersTimer == 0) { spawnEncountersTimer = UnityEngine.Random.Range(300, 361); } // 10-12 hours between possible wandering encounter spawns.
+
+            if (currentPixelTravelTime == 0) { currentPixelTravelTime = CalculatePixelTravelTime(true); }
+
+            if (nextPixelTravelTime == 0) { nextPixelTravelTime = CalculatePixelTravelTime(false); }
+
+            --currentPixelTravelTime;
+            dateTimeInSeconds += 120;
+            mapTimeHasChanged = true;
+
+            --weatherChangeTimer;
+            if (weatherChangeTimer <= 0) { currentWeather = OOTMain.RollForWeatherChange(currentWeather, currentPixelClimate, OOTMain.GetSeasonFromDFSeconds(dateTimeInSeconds), ref weatherUnchangedCounter); }
+
+            --spawnEncountersTimer;
+            if (spawnEncountersTimer <= 0) { AttemptToSpawnWanderingEncounters(); }
+
+            if (currentPixelTravelTime <= 0)
+            {
+                currentPixelTravelTime = nextPixelTravelTime;
+                nextPixelTravelTime = 0;
+
+                // Automatically change currentWeather to conform to the weather restrictions of the new climate just moved into.
+                if (currentPixelClimate != nextPixelClimate) { currentWeather = OOTMain.ConformWeatherToClimate(currentWeather, nextPixelClimate); }
+
+                // Automatically change travelType when changing from either land to water or water to land.
+                if (currentPixelClimate != OOTMain.ClimateType.Ocean_Water && nextPixelClimate == OOTMain.ClimateType.Ocean_Water) { travelType = TravelType.Swimming; travelTypeLabel.Text = GetTravelTypeLabelString(); }
+                if (currentPixelClimate == OOTMain.ClimateType.Ocean_Water && nextPixelClimate != OOTMain.ClimateType.Ocean_Water) { travelType = TravelType.FootWalking; travelTypeLabel.Text = GetTravelTypeLabelString(); }
+
+                /*DFPosition worldPos = MapsFile.MapPixelToWorldCoord(nextPlayerPosition.X, nextPlayerPosition.Y);
+                playerGPS.WorldX = worldPos.X;
+                playerGPS.WorldZ = worldPos.Y;
+                playerGPS.UpdateWorldInfo();*/
+
+                previousPlayerPosition.Y = nextPlayerPosition.Y;
+                previousPlayerPosition.X = nextPlayerPosition.X;
+                if (currentTravelLinePositionsList.Count > 0)
+                {
+                    followingTravelLinePositionsList.Add(currentTravelLinePositionsList[0]);
+                    currentTravelLinePositionsList.RemoveAt(0);
+
+                    if (currentTravelLinePositionsList.Count > 0)
+                    {
+                        nextPlayerPosition.Y = currentTravelLinePositionsList[0].Y;
+                        nextPlayerPosition.X = currentTravelLinePositionsList[0].X;
+                    }
+                    else
+                    {
+                        nextPlayerPosition.Y = destinationPosition.Y;
+                        nextPlayerPosition.X = destinationPosition.X;
+                        previousPlayerPosition.Y = nextPlayerPosition.Y;
+                        previousPlayerPosition.X = nextPlayerPosition.X;
+                    }
+                }
+
+                UpdatePlayerTravelDotsTexture();
+                if (wanderingEncountersList.Count > 0) { UpdateWanderingEncounterDotsTexture(); }
+            }
+        }
+
+        void DoPlayerWaitingMethod()
+        {
+            currentPixelHeight = usableHeightMapValues[previousPlayerPosition.X, previousPlayerPosition.Y];
+            nextPixelHeight = usableHeightMapValues[nextPlayerPosition.X, nextPlayerPosition.Y];
+            currentPixelClimate = (OOTMain.ClimateType)usableClimateMapValues[previousPlayerPosition.X, previousPlayerPosition.Y];
+            nextPixelClimate = (OOTMain.ClimateType)usableClimateMapValues[nextPlayerPosition.X, nextPlayerPosition.Y];
+
+            if (weatherChangeTimer == 0) { weatherChangeTimer = UnityEngine.Random.Range(150, 301); } // 5-10 hours between possible weather change checks.
+
+            if (spawnEncountersTimer == 0) { spawnEncountersTimer = UnityEngine.Random.Range(300, 361); } // 10-12 hours between possible wandering encounter spawns.
+
+            dateTimeInSeconds += 120;
+            mapTimeHasChanged = true;
+
+            --weatherChangeTimer;
+            if (weatherChangeTimer <= 0) { currentWeather = OOTMain.RollForWeatherChange(currentWeather, currentPixelClimate, OOTMain.GetSeasonFromDFSeconds(dateTimeInSeconds), ref weatherUnchangedCounter); }
+
+            --spawnEncountersTimer;
+            if (spawnEncountersTimer <= 0) { AttemptToSpawnWanderingEncounters(); }
+
+            UpdatePlayerTravelDotsTexture();
+            if (wanderingEncountersList.Count > 0) { UpdateWanderingEncounterDotsTexture(); }
         }
 
         public int CalculatePixelTravelTime(bool onCurrentPixel)
@@ -995,6 +1043,7 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
                 currentTravelLinePositionsList = FindPixelsBetweenPlayerAndDest();
                 if (currentTravelLinePositionsList.Count > 0)
                 {
+                    isPlayerWaiting = false;
                     nextPlayerPosition.Y = currentTravelLinePositionsList[0].Y;
                     nextPlayerPosition.X = currentTravelLinePositionsList[0].X;
                     dateTimeInSeconds += 15;
@@ -1318,6 +1367,7 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
         private void performFastTravel() // Maybe work on getting this to function again tomorrow or next time, with the more exact screen pixel positions, will see.
         {
             isPlayerTraveling = false;
+            isPlayerWaiting = false;
             weatherChangeTimer = 0;
             weatherUnchangedCounter = 0;
             spawnEncountersTimer = 0;
@@ -1399,6 +1449,7 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             int visionMod = OOTMain.CalculateWeatherVisionMod(currentWeather);
             if (Willpower >= 0) { visionMod += Mathf.Clamp(Mathf.FloorToInt(Willpower * 0.1f), 0, 4); }
             else { visionMod += Mathf.Clamp(Mathf.CeilToInt(Willpower * 0.1f), -4, 0); }
+            if (isPlayerWaiting) { visionMod += 1; } // For now atleast, waiting gives a minor vision bonus.
             int combined = avgRadius + visionMod;
             if (travelMode == TravelMode.Reckless) { combined = Mathf.RoundToInt(combined * 0.75f); } // Might remove this later, will see. That being punishing you for using reckless, in terms of vision range atleast.
             return Mathf.Clamp(combined, 2, 10);
@@ -2585,6 +2636,31 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
         private void ExitMapWindow_OnMouseClick(BaseScreenComponent sender, Vector2 position)
         {
             CloseWindow();
+        }
+
+        private void PassTimeWait_OnMouseClick(BaseScreenComponent sender, Vector2 position)
+        {
+            if (isPlayerWaiting == false)
+            {
+                isPlayerWaiting = true;
+                isPlayerTraveling = false;
+                //currentPixelTravelTime = 0; // This does not change to 0, but keeps whatever value it had before stopping, since you are presumably on the same pixel still.
+                nextPixelTravelTime = 0;
+            }
+            else
+            {
+                isPlayerWaiting = false;
+            }
+
+            currentTravelLinePositionsList = new List<DFPosition>();
+            followingTravelLinePositionsList = new List<DFPosition>();
+            destinationPosition.Y = previousPlayerPosition.Y;
+            destinationPosition.X = previousPlayerPosition.X;
+            nextPlayerPosition.Y = previousPlayerPosition.Y;
+            nextPlayerPosition.X = previousPlayerPosition.X;
+
+            UpdatePlayerTravelDotsTexture();
+            if (wanderingEncountersList.Count > 0) { UpdateWanderingEncounterDotsTexture(); }
         }
 
         private void CenterMapView_OnMouseClick(BaseScreenComponent sender, Vector2 position)

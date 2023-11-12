@@ -76,7 +76,7 @@ namespace OverhauledOverworldTravel
             if (destinationReached == true)
                 return;
 
-            if (NewOOTMapWindow.isPlayerTraveling == true)
+            if (NewOOTMapWindow.isPlayerTraveling == true || NewOOTMapWindow.isPlayerWaiting == true)
             {
                 if ((previousEncounterPosition.Y == encounterDestination.Y) || (previousEncounterPosition.X == encounterDestination.X))
                 {

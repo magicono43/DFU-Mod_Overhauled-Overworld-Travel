@@ -20,6 +20,9 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
     {
         public static NewOOTMapWindow Instance;
 
+        public int RealHealth { get { return GameManager.Instance.PlayerEntity.CurrentHealth; } }
+        public int RealFatigue { get { return GameManager.Instance.PlayerEntity.CurrentFatigue; } }
+        public int RealMana { get { return GameManager.Instance.PlayerEntity.CurrentMagicka; } }
         public int Speed { get { return GameManager.Instance.PlayerEntity.Stats.LiveSpeed - 50; } } // This stuff will eventually be moved to another "FormulaHelper" type script.
         public int Willpower { get { return GameManager.Instance.PlayerEntity.Stats.LiveWillpower - 50; } }
         public int RunSkill { get { return GameManager.Instance.PlayerEntity.Skills.GetLiveSkillValue(DFCareer.Skills.Running); } }
@@ -119,6 +122,17 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
         TextLabel sixthDebugLabel;
         TextLabel seventhDebugLabel;
 
+        Panel playerVitalsPanel;
+        Panel healthVitalsPanel;
+        Panel healthBar;
+        TextLabel healthBarText;
+        Panel fatigueVitalsPanel;
+        Panel fatigueBar;
+        TextLabel fatigueBarText;
+        Panel manaVitalsPanel;
+        Panel manaBar;
+        TextLabel manaBarText;
+
         #endregion
 
         int currentZoom = 1;
@@ -175,6 +189,7 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
 
         public static bool isPlayerTraveling = false;
         public static bool isPlayerWaiting = false;
+        public static bool isPlayerResting = false;
 
         TravelType travelType = TravelType.FootWalking;
         TravelMode travelMode = TravelMode.Cautious;
@@ -205,7 +220,12 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
 
         List<GameObject> wanderingEncountersList = new List<GameObject>();
 
-        // Tomorrow, now that I have the basics of the wandering encounters worked out atleast. I'm likely going to try and get the basic framework for the "vitals" tracking and stuff working as well, will see.
+        float mapHealthCurrent = 1000;
+        float mapFatigueCurrent = 1000;
+        float mapManaCurrent = 1000;
+        //float healthChangeAccum = 0;
+        float fatigueChangeAccum = 0;
+        //float manaChangeAccum = 0;
 
         #region Properties
 
@@ -399,7 +419,7 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             searchHighlightTexture.filterMode = FilterMode.Point;
 
             // Panel housing the button bar on the left of the screen
-            leftButtonsPanel = DaggerfallUI.AddPanel(new Rect(0, 175, 105, 318), worldMapPanel);
+            leftButtonsPanel = DaggerfallUI.AddPanel(new Rect(0, 110, 105, 371), worldMapPanel);
             leftButtonsPanel.BackgroundColor = new Color(0.9f, 0.1f, 0.5f, 0.75f); // For testing purposes
 
             // Testing First UI Button in left panel
@@ -425,6 +445,10 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             // Testing Sixth UI Button in left panel
             Button testingUIButton14 = CreateGenericTextButton(new Rect(2, 263, 100, 50), leftButtonsPanel, (int)SoundClips.ArenaSpider, "Wait", 4.0f);
             testingUIButton14.OnMouseClick += PassTimeWait_OnMouseClick;
+
+            // Testing Seventh UI Button in left panel
+            Button testingUIButton15 = CreateGenericTextButton(new Rect(2, 315, 100, 50), leftButtonsPanel, (int)SoundClips.EnemyMummyBark, "Rest", 4.0f);
+            testingUIButton15.OnMouseClick += PassTimeRest_OnMouseClick;
 
             // Panel housing the button bar on the right of the screen
             rightButtonsPanel = DaggerfallUI.AddPanel(new Rect(895, 15, 105, 421), worldMapPanel);
@@ -471,6 +495,46 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             travelTypeLabel = DaggerfallUI.AddTextLabel(DaggerfallUI.LargeFont, new Vector2(0, 85), GetTravelTypeLabelString(), worldMapPanel);
             travelTypeLabel.HorizontalAlignment = HorizontalAlignment.Center;
             travelTypeLabel.TextScale = 2.0f;
+
+            // Panel housing all of the player vitals
+            playerVitalsPanel = DaggerfallUI.AddPanel(new Rect(200, 110, 608, 44), worldMapPanel);
+            playerVitalsPanel.BackgroundColor = new Color(0.9f, 0.1f, 0.5f, 0.75f); // For testing purposes
+
+            // Panel housing player health vitals
+            healthVitalsPanel = DaggerfallUI.AddPanel(new Rect(2, 2, 200, 40), playerVitalsPanel);
+            healthVitalsPanel.BackgroundColor = new Color(0.1f, 0.5f, 0.8f, 0.75f); // For testing purposes
+            healthBar = DaggerfallUI.AddPanel(new Rect(1, 0, 200, 40), healthVitalsPanel);
+            healthBar.BackgroundColor = new Color32(0, 255, 0, 230);
+            healthBarText = DaggerfallUI.AddTextLabel(DaggerfallUI.LargeFont, new Vector2(0, 0), string.Empty, healthVitalsPanel);
+            healthBarText.HorizontalAlignment = HorizontalAlignment.Center;
+            healthBarText.VerticalAlignment = VerticalAlignment.Middle;
+            healthBarText.TextScale = 2.0f;
+            Outline healthBarBorder = DaggerfallUI.AddOutline(new Rect(0, 0, 200, 40), new Color32(255, 235, 4, 215), healthVitalsPanel);
+            RefreshHealth();
+
+            // Panel housing player fatigue vitals
+            fatigueVitalsPanel = DaggerfallUI.AddPanel(new Rect(204, 2, 200, 40), playerVitalsPanel);
+            fatigueVitalsPanel.BackgroundColor = new Color(0.1f, 0.5f, 0.8f, 0.75f); // For testing purposes
+            fatigueBar = DaggerfallUI.AddPanel(new Rect(1, 0, 200, 40), fatigueVitalsPanel);
+            fatigueBar.BackgroundColor = new Color32(255, 0, 0, 230);
+            fatigueBarText = DaggerfallUI.AddTextLabel(DaggerfallUI.LargeFont, new Vector2(0, 0), string.Empty, fatigueVitalsPanel);
+            fatigueBarText.HorizontalAlignment = HorizontalAlignment.Center;
+            fatigueBarText.VerticalAlignment = VerticalAlignment.Middle;
+            fatigueBarText.TextScale = 2.0f;
+            Outline fatigueBarBorder = DaggerfallUI.AddOutline(new Rect(0, 0, 200, 40), new Color32(255, 235, 4, 215), fatigueVitalsPanel);
+            RefreshFatigue();
+
+            // Panel housing player mana vitals
+            manaVitalsPanel = DaggerfallUI.AddPanel(new Rect(406, 2, 200, 40), playerVitalsPanel);
+            manaVitalsPanel.BackgroundColor = new Color(0.1f, 0.5f, 0.8f, 0.75f); // For testing purposes
+            manaBar = DaggerfallUI.AddPanel(new Rect(1, 0, 200, 40), manaVitalsPanel);
+            manaBar.BackgroundColor = new Color32(0, 0, 255, 230);
+            manaBarText = DaggerfallUI.AddTextLabel(DaggerfallUI.LargeFont, new Vector2(0, 0), string.Empty, manaVitalsPanel);
+            manaBarText.HorizontalAlignment = HorizontalAlignment.Center;
+            manaBarText.VerticalAlignment = VerticalAlignment.Middle;
+            manaBarText.TextScale = 2.0f;
+            Outline manaBarBorder = DaggerfallUI.AddOutline(new Rect(0, 0, 200, 40), new Color32(255, 235, 4, 215), manaVitalsPanel);
+            RefreshMana();
 
             // Add region/location label
             regionLabel = DaggerfallUI.AddTextLabel(DaggerfallUI.LargeFont, new Vector2(0, 2), string.Empty, worldMapPanel);
@@ -653,6 +717,7 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
 
             isPlayerTraveling = false;
             isPlayerWaiting = false;
+            isPlayerResting = false;
             mapTimeHasChanged = false;
 
             // Make a "clone" of the values for this array when this window initially opens
@@ -668,6 +733,10 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             travelMode = TravelMode.Cautious;
             if (currentPixelClimate != OOTMain.ClimateType.Ocean_Water) { travelType = TravelType.FootWalking; }
             else { travelType = TravelType.Swimming; }
+
+            mapHealthCurrent = RealHealth;
+            mapFatigueCurrent = RealFatigue;
+            mapManaCurrent = RealMana;
 
             worldTimer = GameObject.Find("DaggerfallUnity").GetComponent<WorldTime>();
             dateTime = worldTimer.DaggerfallDateTime.Clone();
@@ -685,6 +754,7 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
 
             isPlayerTraveling = false;
             isPlayerWaiting = false;
+            isPlayerResting = false;
             mapTimeHasChanged = false;
 
             timeSinceLastModeChange = 0;
@@ -715,6 +785,9 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
                 clockDisplayString = GetTimeMode(dateTime.Hour, dateTime.Minute) + " , " + dateTime.DayName + " the " + (dateTime.Day + 1) + GetSuffix(dateTime.Day + 1);
                 mapClockText.Text = clockDisplayString;
                 mapTimeHasChanged = false;
+                RefreshHealth();
+                RefreshFatigue();
+                RefreshMana();
             }
 
             if ((previousPlayerPosition.Y != destinationPosition.Y) || (previousPlayerPosition.X != destinationPosition.X))
@@ -732,6 +805,7 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
                 if (isPlayerTraveling)
                 {
                     isPlayerWaiting = false;
+                    isPlayerResting = false;
                 }
                 else
                 {
@@ -847,6 +921,8 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             dateTimeInSeconds += 120;
             mapTimeHasChanged = true;
 
+            AccumulateVitalsChanges(120);
+
             --weatherChangeTimer;
             if (weatherChangeTimer <= 0) { currentWeather = OOTMain.RollForWeatherChange(currentWeather, currentPixelClimate, OOTMain.GetSeasonFromDFSeconds(dateTimeInSeconds), ref weatherUnchangedCounter); }
 
@@ -909,6 +985,8 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
 
             dateTimeInSeconds += 120;
             mapTimeHasChanged = true;
+
+            AccumulateVitalsChanges(120);
 
             --weatherChangeTimer;
             if (weatherChangeTimer <= 0) { currentWeather = OOTMain.RollForWeatherChange(currentWeather, currentPixelClimate, OOTMain.GetSeasonFromDFSeconds(dateTimeInSeconds), ref weatherUnchangedCounter); }
@@ -1044,10 +1122,12 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
                 if (currentTravelLinePositionsList.Count > 0)
                 {
                     isPlayerWaiting = false;
+                    isPlayerResting = false;
                     nextPlayerPosition.Y = currentTravelLinePositionsList[0].Y;
                     nextPlayerPosition.X = currentTravelLinePositionsList[0].X;
                     dateTimeInSeconds += 15;
                     mapTimeHasChanged = true;
+                    AccumulateVitalsChanges(15);
                 }
 
                 // Play distinct sound just for testing right now.
@@ -1368,6 +1448,7 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
         {
             isPlayerTraveling = false;
             isPlayerWaiting = false;
+            isPlayerResting = false;
             weatherChangeTimer = 0;
             weatherUnchangedCounter = 0;
             spawnEncountersTimer = 0;
@@ -1445,6 +1526,7 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
 
         public int CalculateVisionRadius()
         {
+            if (isPlayerResting) { return 0; } // Player vision is absolute minimum while resting.
             int avgRadius = 6;
             int visionMod = OOTMain.CalculateWeatherVisionMod(currentWeather);
             if (Willpower >= 0) { visionMod += Mathf.Clamp(Mathf.FloorToInt(Willpower * 0.1f), 0, 4); }
@@ -1846,6 +1928,79 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
 
             // Present texture
             mouseCursorHitboxOverlayPanel.BackgroundTexture = mouseCursorHitboxTexture;
+        }
+
+        public void AccumulateVitalsChanges(ulong timeChangeInSeconds)
+        {
+            float fatigueLoss = 0.008f; // Fatigue loss per/second. Equates to about 0.5 per/minute. But this value is more like 0.48, oh well.
+            //float healthLoss = 0;
+            //float manaLoss = 0;
+
+            if (!isPlayerWaiting) // Only consider these travelType modifiers if NOT waiting.
+            {
+                switch (travelType)
+                {
+                    case TravelType.FootWalking:
+                    default:
+                        fatigueLoss *= 3; break;
+                    case TravelType.FootRunning:
+                        fatigueLoss *= 9; break; // Will definitely modify this later based on character traits and running skill, endurance, etc.
+                    case TravelType.Wagon:
+                        fatigueLoss *= 3; break;
+                    case TravelType.Horse:
+                        fatigueLoss *= 3; break;
+                    case TravelType.Swimming:
+                        fatigueLoss *= 9; break; // Will definitely modify this later based on character race, traits, swimming skill, endurance, etc.
+                    case TravelType.Raft:
+                        fatigueLoss *= 7; break;
+                    case TravelType.Boat:
+                        fatigueLoss *= 2; break;
+                }
+            }
+
+            if (isPlayerResting)
+            {
+                fatigueLoss = -0.18f;
+                // Tomorrow, continue working on getting these vitals bar stuff implemented. Likely also have more attributes effect the drain and recovery of the vitals, etc.
+                // Later likely have resting stop automatically when all vitals are filled up, also modify this value based on other factors, as well as when passed out, etc.
+                // Oh yeah, also have to remember to change where resting is allowed, likely won't allow it when in water, atleast not for everyone, will see, etc.
+                // Oh yeah again, likely have initiating rest "spend" some time, the idea being you are setting up camp or something for a few minutes atleast, when not passed out atleast.
+            }
+
+            // Eventually have current weather have some effect.
+            // Eventually have current terrain elevation (and probably the difference between current and next maybe?) have some effect.
+            // Eventually have travel mode possibly have some effect?
+            // Eventually have health and mana be effected by certain things. Right now just fatigue.
+
+            fatigueChangeAccum = fatigueLoss * timeChangeInSeconds;
+            //healthChangeAccum = 0;
+            //manaChangeAccum = 0;
+        }
+
+        public void RefreshHealth()
+        {
+            float currHP = mapHealthCurrent;
+            float maxHP = GameManager.Instance.PlayerEntity.MaxHealth;
+            healthBar.Size = new Vector2((int)Mathf.Floor((currHP / maxHP) * 200), 40);
+            healthBarText.Text = string.Format("{0} / {1}", currHP, maxHP);
+        }
+
+        public void RefreshFatigue()
+        {
+            float maxFatigue = GameManager.Instance.PlayerEntity.MaxFatigue;
+            mapFatigueCurrent = Mathf.Clamp(mapFatigueCurrent - fatigueChangeAccum, 0, (int)maxFatigue);
+            fatigueChangeAccum = 0;
+            float currFatigue = mapFatigueCurrent; // So * 0.015625 is apparently equivalent to / 64. Just a note for possible "efficiency" in calculations here.
+            fatigueBar.Size = new Vector2((int)Mathf.Floor((currFatigue / maxFatigue) * 200), 40);
+            fatigueBarText.Text = string.Format("{0} / {1}", Mathf.RoundToInt(currFatigue * 0.015625f), Mathf.Round(maxFatigue * 0.015625f));
+        }
+
+        public void RefreshMana()
+        {
+            float currMana = mapManaCurrent;
+            float maxMana = GameManager.Instance.PlayerEntity.MaxMagicka; // Later want to consider stuff like "light or dark powered margery" and stuff like that probably, etc.
+            manaBar.Size = new Vector2((int)Mathf.Floor((currMana / maxMana) * 200), 40);
+            manaBarText.Text = string.Format("{0} / {1}", currMana, maxMana);
         }
 
         public void AttemptToSpawnWanderingEncounters()
@@ -2649,6 +2804,33 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             }
             else
             {
+                isPlayerWaiting = false;
+            }
+
+            currentTravelLinePositionsList = new List<DFPosition>();
+            followingTravelLinePositionsList = new List<DFPosition>();
+            destinationPosition.Y = previousPlayerPosition.Y;
+            destinationPosition.X = previousPlayerPosition.X;
+            nextPlayerPosition.Y = previousPlayerPosition.Y;
+            nextPlayerPosition.X = previousPlayerPosition.X;
+
+            UpdatePlayerTravelDotsTexture();
+            if (wanderingEncountersList.Count > 0) { UpdateWanderingEncounterDotsTexture(); }
+        }
+
+        private void PassTimeRest_OnMouseClick(BaseScreenComponent sender, Vector2 position)
+        {
+            if (isPlayerResting == false)
+            {
+                isPlayerResting = true;
+                isPlayerWaiting = true;
+                isPlayerTraveling = false;
+                //currentPixelTravelTime = 0; // This does not change to 0, but keeps whatever value it had before stopping, since you are presumably on the same pixel still.
+                nextPixelTravelTime = 0;
+            }
+            else
+            {
+                isPlayerResting = false;
                 isPlayerWaiting = false;
             }
 

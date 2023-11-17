@@ -191,6 +191,8 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
         public static bool isPlayerTraveling = false;
         public static bool isPlayerWaiting = false;
         public static bool isPlayerResting = false;
+        public static bool isPlayerPassedOut = false;
+        public static bool isPlayerDrowning = false;
 
         TravelType travelType = TravelType.FootWalking;
         TravelMode travelMode = TravelMode.Cautious;
@@ -688,6 +690,9 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             // Stops travel on the map-screen and performs the necessary actions to bring the player to that current pixel in the game-world, I.E. fast travels to it.
             DaggerfallUI.Instance.PlayOneShot(SoundClips.ButtonClick);
 
+            if (isPlayerPassedOut)
+                return;
+
             CloseWindow();
         }
 
@@ -721,6 +726,8 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             isPlayerTraveling = false;
             isPlayerWaiting = false;
             isPlayerResting = false;
+            isPlayerPassedOut = false;
+            isPlayerDrowning = false;
             mapTimeHasChanged = false;
 
             // Make a "clone" of the values for this array when this window initially opens
@@ -753,11 +760,16 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
         {
             base.OnPop();
 
+            if (isPlayerPassedOut)
+                return;
+
             regionSelectionMode = false;
 
             isPlayerTraveling = false;
             isPlayerWaiting = false;
             isPlayerResting = false;
+            isPlayerPassedOut = false;
+            isPlayerDrowning = false;
             mapTimeHasChanged = false;
 
             timeSinceLastModeChange = 0;
@@ -792,7 +804,12 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
                 RefreshFatigue();
                 RefreshMana();
                 AutoStopRestOnRefill();
+                if (mapHealthCurrent <= 0) { PlayerDied(); }
+                if (mapFatigueCurrent <= 0) { TogglePassedOutState(true); }
+                if (isPlayerPassedOut && mapFatigueCurrent >= GameManager.Instance.PlayerEntity.MaxFatigue * 0.15f) { TogglePassedOutState(false); }
             }
+
+            if (mapHealthCurrent <= 0) { CloseWindow(); }
 
             AnimateVitalsBars();
 
@@ -1101,6 +1118,10 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
 
             // Ignore clicks that are within the screen-space that these buttons occupy while a region is selected. Needed to use "sender.MousePosition" due to the "position" being post-scaling value.
             if ((leftButtonsPanel.Rectangle.Contains(sender.MousePosition) && leftButtonsPanel.Enabled == true) || rightButtonsPanel.Rectangle.Contains(sender.MousePosition) && rightButtonsPanel.Enabled == true)
+                return;
+
+            // Don't allow clicking/traveling while currently passed out.
+            if (isPlayerPassedOut)
                 return;
 
             if (regionSelectionMode)
@@ -1483,10 +1504,9 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             GameManager.Instance.StreamingWorld.RestoreWorldCompensationHeight(0);
             GameManager.Instance.StreamingWorld.TeleportToCoordinates((int)fastTravelPos.X, (int)fastTravelPos.Y, StreamingWorld.RepositionMethods.DirectionFromStartMarker);
 
-            GameManager.Instance.PlayerEntity.CurrentHealth = GameManager.Instance.PlayerEntity.MaxHealth;
-            GameManager.Instance.PlayerEntity.CurrentFatigue = GameManager.Instance.PlayerEntity.MaxFatigue;
-            if (!GameManager.Instance.PlayerEntity.Career.NoRegenSpellPoints)
-                GameManager.Instance.PlayerEntity.CurrentMagicka = GameManager.Instance.PlayerEntity.MaxMagicka;
+            GameManager.Instance.PlayerEntity.CurrentHealth = Mathf.RoundToInt(mapHealthCurrent);
+            GameManager.Instance.PlayerEntity.CurrentFatigue = Mathf.RoundToInt(mapFatigueCurrent);
+            GameManager.Instance.PlayerEntity.CurrentMagicka = Mathf.RoundToInt(mapManaCurrent);
 
             DaggerfallUnity.WorldTime.DaggerfallDateTime.RaiseTime(dateTimeInSeconds - initialDateTimeInSeconds);
 
@@ -1936,6 +1956,54 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             mouseCursorHitboxOverlayPanel.BackgroundTexture = mouseCursorHitboxTexture;
         }
 
+        // Not sure what else I'll need to change/turn on or off here for the dying state, but will see.
+        public void PlayerDied()
+        {
+            ShowSimpleTextPopup("You died...");
+            TogglePassedOutState(false);
+            mapHealthCurrent = 0;
+        }
+
+        public void TogglePassedOutState(bool PassOut)
+        {
+            if (PassOut)
+            {
+                if (currentPixelClimate == OOTMain.ClimateType.Ocean_Water && travelType == TravelType.Swimming) // Can't rest while swimming, besides some cases that will later be established.
+                {
+                    isPlayerDrowning = true;
+                }
+
+                if (isPlayerDrowning) { ShowSimpleTextPopup("Completely exhausted, you start drowning!"); }
+                else { ShowSimpleTextPopup("You pass out, completely exhausted. In this state you are defenseless against enemies and the elements."); }
+
+                isPlayerPassedOut = true;
+                isPlayerResting = true;
+                isPlayerWaiting = true;
+            }
+            else
+            {
+                ShowSimpleTextPopup("You have recovered enough to regain consciousness.");
+                isPlayerPassedOut = false;
+                isPlayerResting = false;
+                isPlayerWaiting = false;
+                isPlayerDrowning = false;
+            }
+
+            isPlayerTraveling = false;
+            //currentPixelTravelTime = 0; // This does not change to 0, but keeps whatever value it had before stopping, since you are presumably on the same pixel still.
+            nextPixelTravelTime = 0;
+
+            currentTravelLinePositionsList = new List<DFPosition>();
+            followingTravelLinePositionsList = new List<DFPosition>();
+            destinationPosition.Y = previousPlayerPosition.Y;
+            destinationPosition.X = previousPlayerPosition.X;
+            nextPlayerPosition.Y = previousPlayerPosition.Y;
+            nextPlayerPosition.X = previousPlayerPosition.X;
+
+            UpdatePlayerTravelDotsTexture();
+            if (wanderingEncountersList.Count > 0) { UpdateWanderingEncounterDotsTexture(); }
+        }
+
         public void AccumulateVitalsChanges(ulong timeChangeInSeconds)
         {
             float fatigueLoss = 0.008f; // Fatigue loss per/second. Equates to about 0.5 per/minute. But this value is more like 0.48, oh well.
@@ -1969,8 +2037,22 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
                 fatigueLoss = -1 * (GameManager.Instance.PlayerEntity.MaxFatigue * 0.08333f * 0.0002778f); // Approximate Equivalent to MaxFatigue / 12 / 3600. So should take 12 hours to refill fatigue bar from nothing.
                 healthLoss = -1 * HealingRateModifier();
                 manaLoss = -1 * (GameManager.Instance.PlayerEntity.MaxMagicka * 0.08333f * 0.0002778f); // Approximate Equivalent to MaxMagicka / 12 / 3600. So should take 12 hours to refill mana bar from nothing.
+
+                if (isPlayerPassedOut) // vitals increases are decreased while "passed out" from using all of your fatigue.
+                {
+                    if (isPlayerDrowning) // If passed out while swimming and inside water, start drowning, which reduces health rapidly until you recover from being passed out, if you don't die first.
+                    {
+                        healthLoss = Mathf.Abs(5 * 0.0002778f);
+                        manaLoss = 0;
+                    }
+                    else
+                    {
+                        healthLoss *= 0.25f;
+                        manaLoss *= 0.35f;
+                    }
+                    fatigueLoss *= 0.5f;
+                }
                 // Tomorrow, continue working on getting these vitals bar stuff implemented. Likely also have more attributes effect the drain and recovery of the vitals, etc.
-                // Later likely have resting stop automatically when all vitals are filled up, also modify this value based on other factors, as well as when passed out, etc.
                 // Oh yeah again, likely have initiating rest "spend" some time, the idea being you are setting up camp or something for a few minutes atleast, when not passed out atleast.
             }
 
@@ -2035,6 +2117,16 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
                     isPlayerWaiting = false;
                 }
             }
+        }
+
+        public void ShowSimpleTextPopup(string text)
+        {
+            TextFile.Token[] textToken = DaggerfallUnity.Instance.TextProvider.CreateTokens(TextFile.Formatting.JustifyCenter, text);
+
+            DaggerfallMessageBox inspectItemPopup = new DaggerfallMessageBox(DaggerfallUI.UIManager, DaggerfallUI.UIManager.TopWindow);
+            inspectItemPopup.SetTextTokens(textToken);
+            inspectItemPopup.Show();
+            inspectItemPopup.ClickAnywhereToClose = true;
         }
 
         public void AnimateVitalsBars() // Just for testing right now, but if I like it might keep it in the end, will see.
@@ -2861,11 +2953,17 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
 
         private void ExitMapWindow_OnMouseClick(BaseScreenComponent sender, Vector2 position)
         {
+            if (isPlayerPassedOut)
+                return;
+
             CloseWindow();
         }
 
         private void PassTimeWait_OnMouseClick(BaseScreenComponent sender, Vector2 position)
         {
+            if (isPlayerPassedOut)
+                return;
+
             if (isPlayerWaiting == false)
             {
                 isPlayerWaiting = true;
@@ -2891,6 +2989,9 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
 
         private void PassTimeRest_OnMouseClick(BaseScreenComponent sender, Vector2 position)
         {
+            if (isPlayerPassedOut)
+                return;
+
             if (currentPixelClimate == OOTMain.ClimateType.Ocean_Water && travelType == TravelType.Swimming) // Can't rest while swimming, besides some cases that will later be established.
             {
                 isPlayerResting = false;
@@ -2965,6 +3066,9 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
 
         private void StartRegionSelectionMode_OnMouseClick(BaseScreenComponent sender, Vector2 position)
         {
+            if (isPlayerPassedOut)
+                return;
+
             if (regionSelectionMode == false)
             {
                 regionSelectionMode = true;
@@ -2977,6 +3081,9 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
 
         private void SwitchTravelMode_OnMouseClick(BaseScreenComponent sender, Vector2 position)
         {
+            if (isPlayerPassedOut)
+                return;
+
             if (travelMode == TravelMode.Cautious) { travelMode = TravelMode.Reckless; }
             else { travelMode = TravelMode.Cautious; }
 
@@ -2991,6 +3098,9 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
 
         private void CycleTravelType_OnMouseClick(BaseScreenComponent sender, Vector2 position)
         {
+            if (isPlayerPassedOut)
+                return;
+
             if (currentPixelClimate == OOTMain.ClimateType.Ocean_Water)
             {
                 if (travelType == TravelType.Swimming) { travelType = TravelType.Raft; }

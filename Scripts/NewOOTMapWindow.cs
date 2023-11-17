@@ -25,6 +25,7 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
         public int RealMana { get { return GameManager.Instance.PlayerEntity.CurrentMagicka; } }
         public int Speed { get { return GameManager.Instance.PlayerEntity.Stats.LiveSpeed - 50; } } // This stuff will eventually be moved to another "FormulaHelper" type script.
         public int Willpower { get { return GameManager.Instance.PlayerEntity.Stats.LiveWillpower - 50; } }
+        public int Endurance { get { return GameManager.Instance.PlayerEntity.Stats.LiveEndurance - 50; } }
         public int RunSkill { get { return GameManager.Instance.PlayerEntity.Skills.GetLiveSkillValue(DFCareer.Skills.Running); } }
         public int SwimSkill { get { return GameManager.Instance.PlayerEntity.Skills.GetLiveSkillValue(DFCareer.Skills.Swimming); } }
         public int ClimbSkill { get { return GameManager.Instance.PlayerEntity.Skills.GetLiveSkillValue(DFCareer.Skills.Climbing); } }
@@ -223,9 +224,11 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
         float mapHealthCurrent = 1000;
         float mapFatigueCurrent = 1000;
         float mapManaCurrent = 1000;
-        //float healthChangeAccum = 0;
+        float healthChangeAccum = 0;
         float fatigueChangeAccum = 0;
-        //float manaChangeAccum = 0;
+        float manaChangeAccum = 0;
+        byte animatedFrameTracker = 51;
+        bool reverseFrames = false;
 
         #region Properties
 
@@ -504,7 +507,7 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             healthVitalsPanel = DaggerfallUI.AddPanel(new Rect(2, 2, 200, 40), playerVitalsPanel);
             healthVitalsPanel.BackgroundColor = new Color(0.1f, 0.5f, 0.8f, 0.75f); // For testing purposes
             healthBar = DaggerfallUI.AddPanel(new Rect(1, 0, 200, 40), healthVitalsPanel);
-            healthBar.BackgroundColor = new Color32(0, 255, 0, 230);
+            healthBar.BackgroundColor = new Color32(0, 255, 0, 255);
             healthBarText = DaggerfallUI.AddTextLabel(DaggerfallUI.LargeFont, new Vector2(0, 0), string.Empty, healthVitalsPanel);
             healthBarText.HorizontalAlignment = HorizontalAlignment.Center;
             healthBarText.VerticalAlignment = VerticalAlignment.Middle;
@@ -516,7 +519,7 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             fatigueVitalsPanel = DaggerfallUI.AddPanel(new Rect(204, 2, 200, 40), playerVitalsPanel);
             fatigueVitalsPanel.BackgroundColor = new Color(0.1f, 0.5f, 0.8f, 0.75f); // For testing purposes
             fatigueBar = DaggerfallUI.AddPanel(new Rect(1, 0, 200, 40), fatigueVitalsPanel);
-            fatigueBar.BackgroundColor = new Color32(255, 0, 0, 230);
+            fatigueBar.BackgroundColor = new Color32(255, 0, 0, 255);
             fatigueBarText = DaggerfallUI.AddTextLabel(DaggerfallUI.LargeFont, new Vector2(0, 0), string.Empty, fatigueVitalsPanel);
             fatigueBarText.HorizontalAlignment = HorizontalAlignment.Center;
             fatigueBarText.VerticalAlignment = VerticalAlignment.Middle;
@@ -528,7 +531,7 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             manaVitalsPanel = DaggerfallUI.AddPanel(new Rect(406, 2, 200, 40), playerVitalsPanel);
             manaVitalsPanel.BackgroundColor = new Color(0.1f, 0.5f, 0.8f, 0.75f); // For testing purposes
             manaBar = DaggerfallUI.AddPanel(new Rect(1, 0, 200, 40), manaVitalsPanel);
-            manaBar.BackgroundColor = new Color32(0, 0, 255, 230);
+            manaBar.BackgroundColor = new Color32(0, 0, 255, 255);
             manaBarText = DaggerfallUI.AddTextLabel(DaggerfallUI.LargeFont, new Vector2(0, 0), string.Empty, manaVitalsPanel);
             manaBarText.HorizontalAlignment = HorizontalAlignment.Center;
             manaBarText.VerticalAlignment = VerticalAlignment.Middle;
@@ -788,7 +791,10 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
                 RefreshHealth();
                 RefreshFatigue();
                 RefreshMana();
+                AutoStopRestOnRefill();
             }
+
+            AnimateVitalsBars();
 
             if ((previousPlayerPosition.Y != destinationPosition.Y) || (previousPlayerPosition.X != destinationPosition.X))
             {
@@ -1933,8 +1939,8 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
         public void AccumulateVitalsChanges(ulong timeChangeInSeconds)
         {
             float fatigueLoss = 0.008f; // Fatigue loss per/second. Equates to about 0.5 per/minute. But this value is more like 0.48, oh well.
-            //float healthLoss = 0;
-            //float manaLoss = 0;
+            float healthLoss = 0;
+            float manaLoss = 0;
 
             if (!isPlayerWaiting) // Only consider these travelType modifiers if NOT waiting.
             {
@@ -1960,10 +1966,11 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
 
             if (isPlayerResting)
             {
-                fatigueLoss = -0.18f;
+                fatigueLoss = -1 * (GameManager.Instance.PlayerEntity.MaxFatigue * 0.08333f * 0.0002778f); // Approximate Equivalent to MaxFatigue / 12 / 3600. So should take 12 hours to refill fatigue bar from nothing.
+                healthLoss = -1 * HealingRateModifier();
+                manaLoss = -1 * (GameManager.Instance.PlayerEntity.MaxMagicka * 0.08333f * 0.0002778f); // Approximate Equivalent to MaxMagicka / 12 / 3600. So should take 12 hours to refill mana bar from nothing.
                 // Tomorrow, continue working on getting these vitals bar stuff implemented. Likely also have more attributes effect the drain and recovery of the vitals, etc.
                 // Later likely have resting stop automatically when all vitals are filled up, also modify this value based on other factors, as well as when passed out, etc.
-                // Oh yeah, also have to remember to change where resting is allowed, likely won't allow it when in water, atleast not for everyone, will see, etc.
                 // Oh yeah again, likely have initiating rest "spend" some time, the idea being you are setting up camp or something for a few minutes atleast, when not passed out atleast.
             }
 
@@ -1973,16 +1980,28 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             // Eventually have health and mana be effected by certain things. Right now just fatigue.
 
             fatigueChangeAccum = fatigueLoss * timeChangeInSeconds;
-            //healthChangeAccum = 0;
-            //manaChangeAccum = 0;
+            healthChangeAccum = healthLoss * timeChangeInSeconds;
+            manaChangeAccum = manaLoss * timeChangeInSeconds;
+        }
+
+        // Essentially just a recreation of the vanilla DFU healing rate formula, may change later on.
+        private float HealingRateModifier()
+        {
+            float endMod = Endurance * 0.2f;
+            float medicalMod = GameManager.Instance.PlayerEntity.Skills.GetLiveSkillValue(DFCareer.Skills.Medical) + 60;
+            float combined = (endMod + medicalMod * 0.1f) * 0.0002778f;
+            if (combined < 0.000139f) { return 0.000139f; } // Don't allow healing rate to go below 0.5 per hour, I guess for now atleast.
+            else { return combined; }
         }
 
         public void RefreshHealth()
         {
-            float currHP = mapHealthCurrent;
             float maxHP = GameManager.Instance.PlayerEntity.MaxHealth;
+            mapHealthCurrent = Mathf.Clamp(mapHealthCurrent - healthChangeAccum, 0, (int)maxHP);
+            healthChangeAccum = 0;
+            float currHP = mapHealthCurrent;
             healthBar.Size = new Vector2((int)Mathf.Floor((currHP / maxHP) * 200), 40);
-            healthBarText.Text = string.Format("{0} / {1}", currHP, maxHP);
+            healthBarText.Text = string.Format("{0} / {1}", Mathf.RoundToInt(currHP), maxHP);
         }
 
         public void RefreshFatigue()
@@ -1997,10 +2016,62 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
 
         public void RefreshMana()
         {
-            float currMana = mapManaCurrent;
             float maxMana = GameManager.Instance.PlayerEntity.MaxMagicka; // Later want to consider stuff like "light or dark powered margery" and stuff like that probably, etc.
+            mapManaCurrent = Mathf.Clamp(mapManaCurrent - manaChangeAccum, 0, (int)maxMana);
+            manaChangeAccum = 0;
+            float currMana = mapManaCurrent;
             manaBar.Size = new Vector2((int)Mathf.Floor((currMana / maxMana) * 200), 40);
-            manaBarText.Text = string.Format("{0} / {1}", currMana, maxMana);
+            manaBarText.Text = string.Format("{0} / {1}", Mathf.RoundToInt(currMana), maxMana);
+        }
+
+        // Might change this to instead change to normal "waiting" when vitals are full, rather than stop both, but will see later on.
+        public void AutoStopRestOnRefill()
+        {
+            if (isPlayerResting)
+            {
+                if (mapHealthCurrent >= GameManager.Instance.PlayerEntity.MaxHealth && mapFatigueCurrent >= GameManager.Instance.PlayerEntity.MaxFatigue && mapManaCurrent >= GameManager.Instance.PlayerEntity.MaxMagicka)
+                {
+                    isPlayerResting = false;
+                    isPlayerWaiting = false;
+                }
+            }
+        }
+
+        public void AnimateVitalsBars() // Just for testing right now, but if I like it might keep it in the end, will see.
+        {
+            int frameAlpha = 5 * animatedFrameTracker;
+            int lowThreshold = 25;
+            bool startAnimation = false;
+
+            if ((mapHealthCurrent / GameManager.Instance.PlayerEntity.MaxHealth) * 100 <= lowThreshold) { healthBar.BackgroundColor = new Color32(0, 255, 0, (byte)frameAlpha); startAnimation = true; } else { healthBar.BackgroundColor = new Color32(0, 255, 0, 255); }
+            if ((mapFatigueCurrent / GameManager.Instance.PlayerEntity.MaxFatigue) * 100 <= lowThreshold) { fatigueBar.BackgroundColor = new Color32(255, 0, 0, (byte)frameAlpha); startAnimation = true; } else { fatigueBar.BackgroundColor = new Color32(255, 0, 0, 255); }
+            if ((mapManaCurrent / GameManager.Instance.PlayerEntity.MaxMagicka) * 100 <= lowThreshold) { manaBar.BackgroundColor = new Color32(0, 0, 255, (byte)frameAlpha); startAnimation = true; } else { manaBar.BackgroundColor = new Color32(0, 0, 255, 255); }
+
+            if (startAnimation)
+            {
+                if (reverseFrames)
+                {
+                    ++animatedFrameTracker;
+                    if (animatedFrameTracker >= 51)
+                    {
+                        reverseFrames = false;
+                    }
+                }
+                else
+                {
+                    --animatedFrameTracker;
+                }
+
+                if (animatedFrameTracker <= 12)
+                {
+                    reverseFrames = true;
+                }
+            }
+            else
+            {
+                animatedFrameTracker = 51;
+                reverseFrames = false;
+            }
         }
 
         public void AttemptToSpawnWanderingEncounters()
@@ -2820,6 +2891,13 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
 
         private void PassTimeRest_OnMouseClick(BaseScreenComponent sender, Vector2 position)
         {
+            if (currentPixelClimate == OOTMain.ClimateType.Ocean_Water && travelType == TravelType.Swimming) // Can't rest while swimming, besides some cases that will later be established.
+            {
+                isPlayerResting = false;
+                isPlayerWaiting = false;
+                return;
+            }
+
             if (isPlayerResting == false)
             {
                 isPlayerResting = true;

@@ -13,6 +13,8 @@ namespace OverhauledOverworldTravel
 
         string encounterName = "";
 
+        // Tomorrow, will see about working on these wandering encounters more. Assigning "enemies" to them, logic to pursue the player, actually encountering them when collided with on the map, etc.
+
         DFPosition previousEncounterPosition = new DFPosition();
         DFPosition nextEncounterPosition = new DFPosition();
         DFPosition encounterDestination = new DFPosition();

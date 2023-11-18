@@ -191,6 +191,48 @@ namespace OverhauledOverworldTravel
             }
         }
 
+        public static void VitalsAccountForWeather(OOTWeatherType weather, ref float fatigueLoss)
+        {
+            // Later may try to have the climate have an effect as well as just the weather in general. Like being sunny in the desert might be a negative in the desert, but not another climate, etc.
+            // Another idea, could have resistance/weakness/immunity character traits have an effect on these values as well. Like resist/weakness to frost, shock, fire, etc, could be cool.
+            if (fatigueLoss > 0) // If fatigueLoss is going to be multiplied, since a positive value means fatigue is being drained, such as for most activities outside of resting.
+            {
+                switch (weather)
+                {
+                    case OOTWeatherType.Sunny:
+                    case OOTWeatherType.Cloudy:
+                    case OOTWeatherType.Overcast:
+                    case OOTWeatherType.Fog:
+                    default: break;
+                    case OOTWeatherType.Rain: fatigueLoss *= 1.2f; break;
+                    case OOTWeatherType.Thunderstorm: fatigueLoss *= 1.3f; break;
+                    case OOTWeatherType.Sandstorm: fatigueLoss *= 1.5f; break;
+                    case OOTWeatherType.Snow: fatigueLoss *= 1.6f; break;
+                    case OOTWeatherType.Hail: fatigueLoss *= 2f; break;
+                    case OOTWeatherType.Typhoon: fatigueLoss *= 2.3f; break;
+                    case OOTWeatherType.Blizzard: fatigueLoss *= 3; break;
+                }
+            }
+            else // If fatigueLoss is going to be divided, since a negative value means fatigue is being gained, such as from resting.
+            {
+                switch (weather)
+                {
+                    case OOTWeatherType.Sunny:
+                    case OOTWeatherType.Cloudy:
+                    case OOTWeatherType.Overcast:
+                    case OOTWeatherType.Fog:
+                    default: break;
+                    case OOTWeatherType.Rain: fatigueLoss *= 0.9f; break;
+                    case OOTWeatherType.Thunderstorm:
+                    case OOTWeatherType.Sandstorm: fatigueLoss *= 0.85f; break;
+                    case OOTWeatherType.Snow:
+                    case OOTWeatherType.Hail: fatigueLoss *= 0.8f; break;
+                    case OOTWeatherType.Typhoon: fatigueLoss *= 0.75f; break;
+                    case OOTWeatherType.Blizzard: fatigueLoss *= 0.7f; break;
+                }
+            }
+        }
+
         // Converts current map weather to an existing vanilla equivalent, then sets that as the current weather in-game.
         public static void SetRealWeather(OOTWeatherType weather)
         {

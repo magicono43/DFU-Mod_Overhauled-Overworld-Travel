@@ -231,6 +231,8 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
         float manaChangeAccum = 0;
         byte animatedFrameTracker = 51;
         bool reverseFrames = false;
+        int campSetupTimer = 0;
+        DFPosition campSetupPosition = TravelTimeCalculator.GetPlayerTravelPosition();
 
         #region Properties
 
@@ -1009,6 +1011,8 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             dateTimeInSeconds += 120;
             mapTimeHasChanged = true;
 
+            if (campSetupTimer > 0) { --campSetupTimer; }
+
             AccumulateVitalsChanges(120);
 
             --weatherChangeTimer;
@@ -1479,6 +1483,7 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             weatherChangeTimer = 0;
             weatherUnchangedCounter = 0;
             spawnEncountersTimer = 0;
+            campSetupTimer = 0;
             currentPixelTravelTime = 0;
             nextPixelTravelTime = 0;
 
@@ -1640,7 +1645,7 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             string regionName = DaggerfallUnity.ContentReader.MapFileReader.GetRegionName(mapSummary.RegionIndex);
 
             string locationName = string.Empty;
-            if (fogOfWarOverlayPanel.Enabled == true && exploredPixelArray[(int)refCoords.x, (int)refCoords.y] == 0) { }
+            if (fogOfWarOverlayPanel.Enabled == true && exploredPixelArray[(int)refCoords.x, (int)refCoords.y] == 0) { } // 11/17/2023, 8:40 PM: Got an "Index was outside the bounds of the array" error when moving mouse around map, just want to keep that noted. Will maybe make a "try-catch" thing here to catch exceptions like that later on, will see. It occurs when I put the cursor near the very right edge of the map screen. I'm guessing this is just not taking into consideration the bounds when checking a coordinate value, or something.
             else { locationName = GetLocationNameInCurrentRegion(mapSummary.RegionIndex, mapSummary.MapIndex); }
 
             int mapPixelID = mapSummary.ID;
@@ -2012,37 +2017,25 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
 
             if (!isPlayerWaiting) // Only consider these travelType modifiers if NOT waiting.
             {
-                switch (travelType)
-                {
-                    case TravelType.FootWalking:
-                    default:
-                        fatigueLoss *= 3; break;
-                    case TravelType.FootRunning:
-                        fatigueLoss *= 9; break; // Will definitely modify this later based on character traits and running skill, endurance, etc.
-                    case TravelType.Wagon:
-                        fatigueLoss *= 3; break;
-                    case TravelType.Horse:
-                        fatigueLoss *= 3; break;
-                    case TravelType.Swimming:
-                        fatigueLoss *= 9; break; // Will definitely modify this later based on character race, traits, swimming skill, endurance, etc.
-                    case TravelType.Raft:
-                        fatigueLoss *= 7; break;
-                    case TravelType.Boat:
-                        fatigueLoss *= 2; break;
-                }
+                VitalsAccountForTravelType(ref fatigueLoss);
+                VitalsAccountForTerrain(ref fatigueLoss);
             }
 
             if (isPlayerResting)
             {
-                fatigueLoss = -1 * (GameManager.Instance.PlayerEntity.MaxFatigue * 0.08333f * 0.0002778f); // Approximate Equivalent to MaxFatigue / 12 / 3600. So should take 12 hours to refill fatigue bar from nothing.
-                healthLoss = -1 * HealingRateModifier();
-                manaLoss = -1 * (GameManager.Instance.PlayerEntity.MaxMagicka * 0.08333f * 0.0002778f); // Approximate Equivalent to MaxMagicka / 12 / 3600. So should take 12 hours to refill mana bar from nothing.
+                if (campSetupTimer > 0 && !isPlayerPassedOut) { fatigueLoss = 0.032f; } // Don't regain any vitals if still setting up camp, but only if not currently passed out.
+                else
+                {
+                    fatigueLoss = -1 * (GameManager.Instance.PlayerEntity.MaxFatigue * 0.112f * 0.0002778f); // Approximate Equivalent to MaxFatigue / 9 / 3600. So should take 12 hours to refill fatigue bar from nothing.
+                    healthLoss = -1 * HealingRateModifier();
+                    manaLoss = -1 * (GameManager.Instance.PlayerEntity.MaxMagicka * 0.112f * 0.0002778f); // Approximate Equivalent to MaxMagicka / 9 / 3600. So should take 12 hours to refill mana bar from nothing.
+                }
 
                 if (isPlayerPassedOut) // vitals increases are decreased while "passed out" from using all of your fatigue.
                 {
                     if (isPlayerDrowning) // If passed out while swimming and inside water, start drowning, which reduces health rapidly until you recover from being passed out, if you don't die first.
                     {
-                        healthLoss = Mathf.Abs(5 * 0.0002778f);
+                        healthLoss = Mathf.Clamp(Mathf.Abs((20 - ((Endurance * 0.1f) + (SwimSkill * 0.1f))) * 0.0002778f), 0.0012f, 2f); // Swimming and Endurance effect how much health is lost per/second when drowning.
                         manaLoss = 0;
                     }
                     else
@@ -2050,27 +2043,51 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
                         healthLoss *= 0.25f;
                         manaLoss *= 0.35f;
                     }
-                    fatigueLoss *= 0.5f;
+                    fatigueLoss *= 0.6f;
                 }
-                // Tomorrow, continue working on getting these vitals bar stuff implemented. Likely also have more attributes effect the drain and recovery of the vitals, etc.
-                // Oh yeah again, likely have initiating rest "spend" some time, the idea being you are setting up camp or something for a few minutes atleast, when not passed out atleast.
             }
 
-            // Eventually have current weather have some effect.
-            // Eventually have current terrain elevation (and probably the difference between current and next maybe?) have some effect.
-            // Eventually have travel mode possibly have some effect?
-            // Eventually have health and mana be effected by certain things. Right now just fatigue.
+            // Eventually have health and mana be effected by certain things. Right now just fatigue, except when drowning.
+            OOTMain.VitalsAccountForWeather(currentWeather, ref fatigueLoss);
 
             fatigueChangeAccum = fatigueLoss * timeChangeInSeconds;
             healthChangeAccum = healthLoss * timeChangeInSeconds;
             manaChangeAccum = manaLoss * timeChangeInSeconds;
         }
 
+        private void VitalsAccountForTravelType(ref float fatigueLoss)
+        {
+            switch (travelType)
+            {
+                case TravelType.FootWalking:
+                default:
+                    fatigueLoss *= 3; break;
+                case TravelType.FootRunning:
+                    fatigueLoss *= Mathf.Clamp(9 - (RunSkill * 0.04f), 6, 15); break; // Will definitely modify this later based on character traits and running skill, endurance, etc.
+                case TravelType.Wagon:
+                    fatigueLoss *= 3; break;
+                case TravelType.Horse:
+                    fatigueLoss *= 3; break;
+                case TravelType.Swimming:
+                    fatigueLoss *= Mathf.Clamp(9 - (SwimSkill * 0.05f), 5, 15); break; // Will definitely modify this later based on character race, traits, swimming skill, endurance, etc.
+                case TravelType.Raft:
+                    fatigueLoss *= Mathf.Clamp(7 - (SwimSkill * 0.04f), 4, 15); break;
+                case TravelType.Boat:
+                    fatigueLoss *= 2; break;
+            }
+        }
+
+        private void VitalsAccountForTerrain(ref float fatigueLoss)
+        {
+            // Just pretty lazy/simple implementation for now, may likely change this later on so it is more detailed and considers skills and such, will see.
+            fatigueLoss *= Mathf.Clamp(1 + (currentPixelHeight * (0.04f - (ClimbSkill * 0.0003f))), 1f, 2f);
+        }
+
         // Essentially just a recreation of the vanilla DFU healing rate formula, may change later on.
         private float HealingRateModifier()
         {
             float endMod = Endurance * 0.2f;
-            float medicalMod = GameManager.Instance.PlayerEntity.Skills.GetLiveSkillValue(DFCareer.Skills.Medical) + 60;
+            float medicalMod = GameManager.Instance.PlayerEntity.Skills.GetLiveSkillValue(DFCareer.Skills.Medical) + 30;
             float combined = (endMod + medicalMod * 0.1f) * 0.0002778f;
             if (combined < 0.000139f) { return 0.000139f; } // Don't allow healing rate to go below 0.5 per hour, I guess for now atleast.
             else { return combined; }
@@ -3001,11 +3018,15 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
 
             if (isPlayerResting == false)
             {
+                if (campSetupPosition.Y == previousPlayerPosition.Y && campSetupPosition.X == previousPlayerPosition.X) { }
+                else { campSetupTimer = 17; }
                 isPlayerResting = true;
                 isPlayerWaiting = true;
                 isPlayerTraveling = false;
                 //currentPixelTravelTime = 0; // This does not change to 0, but keeps whatever value it had before stopping, since you are presumably on the same pixel still.
                 nextPixelTravelTime = 0;
+                campSetupPosition.Y = previousPlayerPosition.Y;
+                campSetupPosition.X = previousPlayerPosition.X;
             }
             else
             {
